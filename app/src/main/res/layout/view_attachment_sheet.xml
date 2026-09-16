@@ -1,0 +1,216 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/attachmentSheetRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FFFFFF">
+
+    <!-- =========================
+         ATTACHMENT OPTIONS + GALLERY
+         ========================= -->
+
+    <LinearLayout
+        android:id="@+id/galleryContent"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:background="#FFFFFF">
+
+        <!-- Gallery header.
+             Hidden while gallery is collapsed.
+             Becomes visible as sheet moves upward. -->
+
+        <LinearLayout
+            android:id="@+id/galleryHeader"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:gravity="center_vertical"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:alpha="0">
+
+            <TextView
+                android:id="@+id/btnGalleryClose"
+                android:layout_width="48dp"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:text="✕"
+                android:textSize="22sp"
+                android:textColor="#222222"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <TextView
+                android:id="@+id/tvGalleryHD"
+                android:layout_width="48dp"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:text="HD"
+                android:textStyle="bold"
+                android:textSize="14sp"
+                android:textColor="#222222"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <TextView
+                android:id="@+id/tvGalleryRecent"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:text="Recent ▾"
+                android:textSize="14sp"
+                android:textColor="#222222"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:clickable="true"
+                android:focusable="true" />
+
+        </LinearLayout>
+
+        <!-- Recent gallery -->
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvAttachmentImages"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:padding="3dp"
+            android:clipToPadding="false"
+            android:overScrollMode="never" />
+
+    </LinearLayout>
+
+
+    <!-- =========================
+         ATTACHMENT OPTIONS
+         ========================= -->
+
+    <ScrollView
+        android:id="@+id/optionsScroll"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fillViewport="true"
+        android:background="#FFFFFF"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:id="@+id/optionsContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- IMPORTANT:
+                 This is your existing attachment-options file.
+                 Do NOT delete Viewer Attach Panel.xml. -->
+
+            <include
+                android:id="@+id/includeAttachmentOptions"
+                layout="@layout/viewer_attach_panel" />
+
+        </LinearLayout>
+
+    </ScrollView>
+
+
+    <!-- =========================
+         SELECTED IMAGE UI
+         ========================= -->
+
+    <LinearLayout
+        android:id="@+id/selectionPanel"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:background="#FFFFFF"
+        android:visibility="gone">
+
+        <!-- Selected image -->
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:background="#111111">
+
+            <ImageView
+                android:id="@+id/imgSelected"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:adjustViewBounds="true"
+                android:scaleType="fitCenter" />
+
+        </FrameLayout>
+
+
+        <!-- Separate caption/input area -->
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="58dp"
+            android:gravity="center_vertical"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:background="#FFFFFF">
+
+            <EditText
+                android:id="@+id/etMediaCaption"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:background="@android:color/transparent"
+                android:hint="Add a caption..."
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:inputType="textCapSentences|textMultiLine"
+                android:maxLines="4"
+                android:textColor="#222222"
+                android:textColorHint="#777777" />
+
+            <ImageButton
+                android:id="@+id/btnMediaSend"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Send"
+                android:src="@android:drawable/ic_menu_send" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+
+    <!-- Discard / Cancel confirmation -->
+
+    <LinearLayout
+        android:id="@+id/discardBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:padding="12dp"
+        android:background="#FFFFFF"
+        android:visibility="gone"
+        android:elevation="12dp">
+
+        <Button
+            android:id="@+id/btnCancelDiscard"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:text="Cancel" />
+
+        <Button
+            android:id="@+id/btnDiscard"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:text="Discard" />
+
+    </LinearLayout>
+
+</FrameLayout>

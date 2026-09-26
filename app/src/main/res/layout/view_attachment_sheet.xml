@@ -102,11 +102,11 @@
 
             <!-- IMPORTANT:
                  This is your existing attachment-options file.
-                 Do NOT delete Viewer Attach Panel.xml. -->
+                 Do NOT delete view_attach_panel.xml. -->
 
             <include
                 android:id="@+id/includeAttachmentOptions"
-                layout="@layout/viewer_attach_panel" />
+                layout="@layout/view_attach_panel" />
 
         </LinearLayout>
 
@@ -114,7 +114,7 @@
 
 
     <!-- =========================
-         SELECTED IMAGE UI
+         SELECTED IMAGE(S) UI
          ========================= -->
 
     <LinearLayout
@@ -125,7 +125,7 @@
         android:background="#FFFFFF"
         android:visibility="gone">
 
-        <!-- Selected image -->
+        <!-- Selected image(s) — 1/2/3/4/+N grid runtime par banega -->
 
         <FrameLayout
             android:layout_width="match_parent"
@@ -133,12 +133,10 @@
             android:layout_weight="1"
             android:background="#111111">
 
-            <ImageView
-                android:id="@+id/imgSelected"
+            <FrameLayout
+                android:id="@+id/selectedPreviewContainer"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:adjustViewBounds="true"
-                android:scaleType="fitCenter" />
+                android:layout_height="match_parent" />
 
         </FrameLayout>
 
@@ -155,6 +153,17 @@
             android:paddingTop="6dp"
             android:paddingBottom="6dp"
             android:background="#FFFFFF">
+
+            <!-- Left-bottom "view selected images" button -->
+
+            <ImageView
+                android:id="@+id/btnViewSelectedThumb"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginEnd="8dp"
+                android:background="#222222"
+                android:scaleType="centerCrop"
+                android:contentDescription="View selected images" />
 
             <EditText
                 android:id="@+id/etMediaCaption"

@@ -185,6 +185,7 @@ class ChatMessageAdapter(
     val tvTime: TextView = itemView.findViewById(R.id.tvMessageTime)
     val ivSingleImage: ImageView = itemView.findViewById(R.id.ivSingleImage)
     val imageGridContainer: android.widget.FrameLayout = itemView.findViewById(R.id.imageGridContainer)
+    val tvCaption: TextView = itemView.findViewById(R.id.tvMessageCaption)
 }
 
     inner class BannerViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
@@ -275,9 +276,18 @@ class ChatMessageAdapter(
                 ImageViewerActivity.start(h.itemView.context, uris, index)
             }
         }
+
+        val caption = row.message.caption
+        if (!caption.isNullOrBlank()) {
+            h.tvCaption.visibility = View.VISIBLE
+            h.tvCaption.text = caption
+        } else {
+            h.tvCaption.visibility = View.GONE
+        }
     } else {
         h.ivSingleImage.visibility = View.GONE
         h.imageGridContainer.visibility = View.GONE
+        h.tvCaption.visibility = View.GONE
         h.tvText.visibility = View.VISIBLE
         h.tvText.text = text
     }

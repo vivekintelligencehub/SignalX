@@ -11,4 +11,19 @@
         android:scaleType="centerCrop"
         android:background="#222222"
         android:contentDescription="Recent image" />
+
+    <TextView
+        android:id="@+id/tvSelectionBadge"
+        android:layout_width="22dp"
+        android:layout_height="22dp"
+        android:layout_gravity="top|end"
+        android:layout_margin="4dp"
+        android:background="@drawable/bg_badge_selected"
+        android:gravity="center"
+        android:textColor="#FFFFFF"
+        android:textSize="11sp"
+        android:textStyle="bold"
+        android:includeFontPadding="false"
+        android:visibility="gone" />
+
 </FrameLayout>

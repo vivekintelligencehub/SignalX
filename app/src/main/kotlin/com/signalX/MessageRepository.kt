@@ -60,7 +60,8 @@ object MessageRepository {
                             id = obj.getString("id"),
                             text = obj.getString("text"),
                             timestamp = obj.getLong("timestamp"),
-                            sessionId = if (obj.isNull("sessionId")) null else obj.getString("sessionId")
+                            sessionId = if (obj.isNull("sessionId")) null else obj.getString("sessionId"),
+                            caption = if (!obj.has("caption") || obj.isNull("caption")) null else obj.getString("caption")
                         )
                     )
                 }
@@ -157,6 +158,7 @@ object MessageRepository {
                 obj.put("text", m.text)
                 obj.put("timestamp", m.timestamp)
                 obj.put("sessionId", m.sessionId ?: JSONObject.NULL)
+                obj.put("caption", m.caption ?: JSONObject.NULL)
 
                 arr.put(obj)
             }
@@ -212,13 +214,14 @@ object MessageRepository {
         messagesByChat[chatId] ?: emptyList()
 
 
-    fun addMessage(chatId: String, text: String): Message {
+    fun addMessage(chatId: String, text: String, caption: String? = null): Message {
 
         val message = Message(
             id = "msg_${System.currentTimeMillis()}_${(0..999).random()}",
             text = text,
             timestamp = System.currentTimeMillis(),
-            sessionId = activeSessionIdByChat[chatId]
+            sessionId = activeSessionIdByChat[chatId],
+            caption = caption
         )
 
         messagesByChat.getOrPut(chatId) { mutableListOf() }.add(message)

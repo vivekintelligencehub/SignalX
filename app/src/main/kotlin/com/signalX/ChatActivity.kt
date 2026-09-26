@@ -25,10 +25,11 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 
-import com.signalX.data.MessageRepository
 import com.vanniktech.emoji.EmojiEditText
 import com.vanniktech.emoji.EmojiPopup
 
@@ -123,6 +124,19 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var emojiPopup: EmojiPopup
 
 
+    // Photos permission â€” grant hote hi gallery refresh hoti hai
+    private val requestMediaPermissionLauncher =
+        registerForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) { granted ->
+
+            if (granted && ::attachmentPanel.isInitialized) {
+
+                attachmentPanel.refreshImages()
+            }
+        }
+
+
     // ======================================================
     // VAULT PASSWORD RESULT
     // ======================================================
@@ -195,6 +209,31 @@ class ChatActivity : AppCompatActivity() {
 
             finish()
         }
+
+
+        // --------------------------------------------------
+        // Keyboard height panel ko dena (caption bar ke liye)
+        // --------------------------------------------------
+
+        ViewCompat.setOnApplyWindowInsetsListener(
+            window.decorView
+        ) { _, insets ->
+
+            attachmentPanel.keyboardHeightPx =
+                if (
+                    insets.isVisible(
+                        WindowInsetsCompat.Type.ime()
+                    )
+                ) {
+                    insets.getInsets(
+                        WindowInsetsCompat.Type.ime()
+                    ).bottom
+                } else {
+                    0
+                }
+
+            insets
+        }
     }
 
 
@@ -260,6 +299,15 @@ class ChatActivity : AppCompatActivity() {
             currentPanel !=
             ActivePanel.NONE
         ) {
+
+            // Attachment panel apna back khud sambhale
+            // (editor > album > discard popup > selection > stepwise > hide)
+            if (
+                ::attachmentPanel.isInitialized &&
+                attachmentPanel.handleBackPress()
+            ) {
+                return
+            }
 
             closePanels()
 
@@ -808,7 +856,7 @@ class ChatActivity : AppCompatActivity() {
 
 
             closeAllSessionsBanner.text =
-                "🔒  Close All Sessions (${revealedSessionIds.size})"
+                "ðŸ”’  Close All Sessions (${revealedSessionIds.size})"
 
         } else {
 
@@ -1297,9 +1345,9 @@ class ChatActivity : AppCompatActivity() {
                         if (
                             s.isNullOrBlank()
                         ) {
-                            "🎤"
+                            "ðŸŽ¤"
                         } else {
-                            "➤"
+                            "âž¤"
                         }
                 }
             }
@@ -1422,9 +1470,14 @@ class ChatActivity : AppCompatActivity() {
                 ActivePanel.NONE
             ) {
 
+                // Koi panel khula hai (paperclip/session) â†’ uska content gayab
+                // aur EMOJI content kholo (keyboard NAHI â€” icon switching jaisa)
                 closePanels()
 
-                showKeyboard()
+                if (!emojiPopup.isShowing) {
+
+                    emojiPopup.toggle()
+                }
 
                 return@setOnClickListener
             }
@@ -1440,7 +1493,21 @@ class ChatActivity : AppCompatActivity() {
 
         btnAttach.setOnClickListener {
 
-            openAttachPanel()
+            // TOGGLE: paperclip panel khula hai â†’ band + keyboard wapas
+            // (WhatsApp jaisa); warna panel kholo.
+            if (
+                currentPanel ==
+                ActivePanel.ATTACH
+            ) {
+
+                closePanels()
+
+                showKeyboard()
+
+            } else {
+
+                openAttachPanel()
+            }
         }
 
 
@@ -1503,6 +1570,32 @@ class ChatActivity : AppCompatActivity() {
                 refreshMessages()
 
                 scrollToBottom()
+            }
+
+
+        // --------------------------------------------------
+        // Attachment panel â€” permission / push / option cells
+        // --------------------------------------------------
+
+        attachmentPanel.onRequestMediaPermission =
+            {
+                requestMediaPermission()
+            }
+
+
+        attachmentPanel.setContentPushView(
+            findViewById(R.id.chatMainContent)
+        )
+
+
+        attachmentPanel.onOptionClicked =
+            { optionId ->
+
+                Toast.makeText(
+                    this,
+                    "$optionId â€” wiring phase 2",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
     }
 
@@ -1601,6 +1694,28 @@ class ChatActivity : AppCompatActivity() {
 
 
     // ======================================================
+    // MEDIA PERMISSION
+    // ======================================================
+
+    private fun requestMediaPermission() {
+
+        val permission =
+            if (
+                android.os.Build.VERSION.SDK_INT >= 33
+            ) {
+                android.Manifest.permission.READ_MEDIA_IMAGES
+            } else {
+                android.Manifest.permission.READ_EXTERNAL_STORAGE
+            }
+
+
+        requestMediaPermissionLauncher.launch(
+            permission
+        )
+    }
+
+
+    // ======================================================
     // CLOSE PANELS
     // ======================================================
 
@@ -1622,7 +1737,7 @@ class ChatActivity : AppCompatActivity() {
 
 
         btnEmoji.text =
-            "😊"
+            "ðŸ˜Š"
 
 
         updateIconHighlight()

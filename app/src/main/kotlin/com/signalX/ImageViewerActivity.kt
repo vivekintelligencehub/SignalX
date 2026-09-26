@@ -14,14 +14,14 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
 import com.bumptech.glide.Glide
 
-class ImageViewerActivity : AppCompatActivity() {
+class ImageViewActivity : AppCompatActivity() {
 
     companion object {
         private const val EXTRA_URIS = "extra_uris"
         private const val EXTRA_INDEX = "extra_index"
 
         fun start(context: Context, uris: List<String>, startIndex: Int) {
-            val i = Intent(context, ImageViewerActivity::class.java)
+            val i = Intent(context, ImageViewActivity::class.java)
             i.putStringArrayListExtra(EXTRA_URIS, ArrayList(uris))
             i.putExtra(EXTRA_INDEX, startIndex)
             context.startActivity(i)
@@ -30,7 +30,7 @@ class ImageViewerActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_image_viewer)
+        setContentView(R.layout.activity_image_view)
 
         val uris = intent.getStringArrayListExtra(EXTRA_URIS) ?: emptyList()
         val startIndex = intent.getIntExtra(EXTRA_INDEX, 0)
@@ -61,7 +61,7 @@ class ImageViewerActivity : AppCompatActivity() {
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
             val v = LayoutInflater.from(parent.context)
-                .inflate(R.layout.item_image_viewer_page, parent, false)
+                .inflate(R.layout.item_image_view_page, parent, false)
             return VH(v)
         }
 

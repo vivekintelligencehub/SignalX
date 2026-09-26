@@ -30,7 +30,7 @@ class ImageViewActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_image_view)
+        setContentView(R.layout.activity_image_viewer)
 
         val uris = intent.getStringArrayListExtra(EXTRA_URIS) ?: emptyList()
         val startIndex = intent.getIntExtra(EXTRA_INDEX, 0)
@@ -61,7 +61,7 @@ class ImageViewActivity : AppCompatActivity() {
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
             val v = LayoutInflater.from(parent.context)
-                .inflate(R.layout.item_image_view_page, parent, false)
+                .inflate(R.layout.item_image_viewer_page, parent, false)
             return VH(v)
         }
 

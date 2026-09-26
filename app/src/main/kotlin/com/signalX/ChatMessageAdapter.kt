@@ -267,13 +267,13 @@ class ChatMessageAdapter(
                 .centerCrop()
                 .into(h.ivSingleImage)
             h.ivSingleImage.setOnClickListener {
-                ImageViewerActivity.start(h.itemView.context, uris, 0)
+                ImageViewActivity.start(h.itemView.context, uris, 0)
             }
         } else {
             h.ivSingleImage.visibility = View.GONE
             h.imageGridContainer.visibility = View.VISIBLE
             buildImageGrid(h.imageGridContainer, uris) { index ->
-                ImageViewerActivity.start(h.itemView.context, uris, index)
+                ImageViewActivity.start(h.itemView.context, uris, index)
             }
         }
 

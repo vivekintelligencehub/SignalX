@@ -28,7 +28,6 @@ import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 
-import com.signalX.data.MessageRepository
 import com.vanniktech.emoji.EmojiEditText
 import com.vanniktech.emoji.EmojiPopup
 
@@ -119,6 +118,7 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var btnTransfer: ImageView
 
     private lateinit var attachmentPanel: AttachmentPanelView
+    private lateinit var chatInputBar: View
 
     private lateinit var emojiPopup: EmojiPopup
 
@@ -218,6 +218,26 @@ class ChatActivity : AppCompatActivity() {
         messageAdapter.isBulkReveal = true
 
         refreshMessages()
+
+
+        // Chat khulte hi latest message par aana chahiye — sirf
+        // tab skip karo jab kisi search-result par jump karna ho.
+
+        if (
+            initialJumpMessageId == null &&
+            highlightQuery == null
+        ) {
+
+            rvMessages.post {
+
+                if (messageAdapter.itemCount > 0) {
+
+                    rvMessages.scrollToPosition(
+                        messageAdapter.itemCount - 1
+                    )
+                }
+            }
+        }
     }
 
 
@@ -961,6 +981,7 @@ class ChatActivity : AppCompatActivity() {
                 messageAdapter.currentHighlightMessageId =
                     null
 
+
                 messageAdapter.notifyDataSetChanged()
             }
 
@@ -1398,6 +1419,12 @@ class ChatActivity : AppCompatActivity() {
             )
 
 
+        chatInputBar =
+            findViewById(
+                R.id.chatInputBar
+            )
+
+
         val rootView =
             findViewById<View>(
                 android.R.id.content
@@ -1479,24 +1506,20 @@ class ChatActivity : AppCompatActivity() {
 
         // --------------------------------------------------
         // Image send from attachment panel
+        // (uris = every image the user selected, in order;
+        //  caption = the single caption box under the preview)
         // --------------------------------------------------
 
         attachmentPanel.onImageSend =
-            { uri, caption ->
+            { uris, caption ->
 
-                /*
-                 * Existing app's current image-message
-                 * format is preserved.
-                 *
-                 * Caption is currently not added to the
-                 * database because the existing Message/
-                 * MessageRepository format supplied earlier
-                 * has no caption field.
-                 */
+                val imgText =
+                    "IMG::" + uris.joinToString("||") { it.toString() }
 
                 MessageRepository.addMessage(
                     chatId,
-                    "IMG::$uri"
+                    imgText,
+                    caption.ifBlank { null }
                 )
 
 
@@ -1572,6 +1595,19 @@ class ChatActivity : AppCompatActivity() {
         }
 
 
+        // Paperclip dobara dabane par band ho jaana chahiye,
+        // transfer icon ki tarah.
+
+        if (currentPanel == ActivePanel.ATTACH) {
+
+            closePanels()
+
+            showKeyboard()
+
+            return
+        }
+
+
         hideKeyboard()
 
 
@@ -1591,6 +1627,23 @@ class ChatActivity : AppCompatActivity() {
 
         attachmentPanel.visibility =
             View.VISIBLE
+
+
+        // Real input bar ka current bottom-edge naapo (yeh
+        // multi-line text se lamba ho sakta hai), taaki collapsed
+        // panel hamesha usi ke bilkul neeche se shuru ho, kabhi
+        // usko cover na kare.
+
+        val inputBarLoc = IntArray(2)
+        chatInputBar.getLocationOnScreen(inputBarLoc)
+
+        val rootLoc = IntArray(2)
+        (attachmentPanel.parent as View).getLocationOnScreen(rootLoc)
+
+        val anchorPx =
+            (inputBarLoc[1] + chatInputBar.height - rootLoc[1]).toFloat()
+
+        attachmentPanel.setCollapsedAnchor(anchorPx)
 
 
         attachmentPanel.showPanel()

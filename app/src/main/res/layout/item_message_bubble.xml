@@ -48,6 +48,18 @@
             android:layout_marginTop="4dp"
             android:visibility="gone" />
 
+        <!-- Caption — sirf IMG:: messages ke liye -->
+        <TextView
+            android:id="@+id/tvMessageCaption"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:maxWidth="260dp"
+            android:textSize="13sp"
+            android:textColor="#222222"
+            android:includeFontPadding="false"
+            android:visibility="gone" />
+
         <TextView
             android:id="@+id/tvMessageTime"
             android:layout_width="wrap_content"
@@ -61,4 +73,4 @@
 
     </LinearLayout>
 
-</LinearLayout> 
+</LinearLayout>

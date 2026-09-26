@@ -36,23 +36,23 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * AttachmentPanelView â€” WhatsApp-style 3-stage attachment panel (FINAL, research-verified).
+ * AttachmentPanelView — WhatsApp-style 3-stage attachment panel (FINAL, research-verified).
  *
  * STATES:
- *   COLLAPSED â†’ SIRF white options area (keyboard ke baraabar); images ki 1 strip
+ *   COLLAPSED → SIRF white options area (keyboard ke baraabar); images ki 1 strip
  *               row usi white area ke bottom 82dp ke UPAR overlay hoti hai.
  *               Input box bilkul nahi hilta (black extra space nahi hai).
- *   MIDDLE    â†’ gallery sheet options ke UPAR glide karti hai (options move nahi hote),
+ *   MIDDLE    → gallery sheet options ke UPAR glide karti hai (options move nahi hote),
  *               header gradually fade-in, chat dim
- *   FULL      â†’ poori screen; ab grid scroll chalti hai; baaki states mein grid scroll
+ *   FULL      → poori screen; ab grid scroll chalti hai; baaki states mein grid scroll
  *               LOCKED rehti hai (sheet drag karti hai)
  *
  * RULES (video-verified):
- *   RULE 1: COLLAPSED mein photo tap  â†’ select + sheet MIDDLE
- *   RULE 2: MIDDLE/FULL mein photo tap â†’ sirf select/deselect (state same)
- *   RULE 3: Selection ke saath COLLAPSED ki taraf (drag / âœ• / scrim tap / back)
- *           â†’ sheet PEHLE poori COLLAPSED hoti hai, PHIR discard popup upar aata hai.
- *           Cancel â†’ jahan the wahi state recover. Discard â†’ collapsed hi rahe, selection clear.
+ *   RULE 1: COLLAPSED mein photo tap  → select + sheet MIDDLE
+ *   RULE 2: MIDDLE/FULL mein photo tap → sirf select/deselect (state same)
+ *   RULE 3: Selection ke saath COLLAPSED ki taraf (drag / ✕ / scrim tap / back)
+ *           → sheet PEHLE poori COLLAPSED hoti hai, PHIR discard popup upar aata hai.
+ *           Cancel → jahan the wahi state recover. Discard → collapsed hi rahe, selection clear.
  *
  * ChatActivity compatibility (existing code untouched):
  *   showPanel(), hidePanel(), refreshImages(), onImageSend, onRequestMediaPermission
@@ -67,9 +67,9 @@ class AttachmentPanelView @JvmOverloads constructor(
     private enum class Zone { BAR, OPTIONS, HEADER, SHEET_BODY, OUTSIDE }
 
     // ---------------------------------------------------------------
-    // Public callbacks â€” ChatActivity already wires these exact names
+    // Public callbacks — ChatActivity already wires these exact names
     // ---------------------------------------------------------------
-    var onImageSend: ((Uri, String) -> Unit)? = null
+    var onImageSend: ((List<Uri>, String) -> Unit)? = null
     var onRequestMediaPermission: (() -> Unit)? = null
 
     /** Baaki option cells: "location","contact","document","poll","audio","members","setting" */
@@ -79,7 +79,7 @@ class AttachmentPanelView @JvmOverloads constructor(
     /** Keyboard ki last known height px (optional, exact keyboard-fit). ChatActivity se aa sakta hai. */
     var keyboardHeightPx: Int = 0
         set(v) {
-            // v==0 = keyboard band hua â†’ "unknown", last measured height YAAD rakh.
+            // v==0 = keyboard band hua → "unknown", last measured height YAAD rakh.
             // Isse tray HAMESHA keyboard naap ki rehti hai (input box kabhi na hile).
             if (v > dp(120f)) field = v
             if (panelH > 0) applySizing()
@@ -249,7 +249,7 @@ class AttachmentPanelView @JvmOverloads constructor(
         scrimView.visibility = GONE
         scrimView.setOnClickListener { collapseThenAsk(currentState) }
 
-        // grid â€” SAME adapter + SAME item_recent_image.xml. collapsed mein sirf
+        // grid — SAME adapter + SAME item_recent_image.xml. collapsed mein sirf
         // iski pehli row dikhti hai; duplicate grid nahi.
         // Dhyan: suppressLayout NAHI (wo items ka layout hi rok deta hai = blank grid!).
         // Sirf SCROLL lock hai: sheet drag pe rahe to grid scroll nahi hoti, FULL mein hoti hai.
@@ -270,7 +270,7 @@ class AttachmentPanelView @JvmOverloads constructor(
         wireAlbumGestures()
 
         // IMPORTANT: view_attach_panel.xml ki apni hard-coded (keyboard-naap) height ko
-        // override karo â€” white box SIRF options ke barabar rahe, uske neeche koi white NAHI.
+        // override karo — white box SIRF options ke barabar rahe, uske neeche koi white NAHI.
         // (optionsContainer children: [optPill, <include view_attach_panel>])
         optionsContainer.getChildAt(optionsContainer.childCount - 1)?.let { included ->
             (included.layoutParams as? LinearLayout.LayoutParams)?.let { lp ->
@@ -286,7 +286,7 @@ class AttachmentPanelView @JvmOverloads constructor(
     }
 
     private fun wireClicks() {
-        // Option cells (view_attach_panel.xml ke EXISTING ids â€” file unchanged)
+        // Option cells (view_attach_panel.xml ke EXISTING ids — file unchanged)
         findViewById<View>(R.id.cellGallery).setOnClickListener {
             if (currentState != State.FULL) goState(State.MIDDLE)
         }
@@ -313,7 +313,7 @@ class AttachmentPanelView @JvmOverloads constructor(
 
         fileBox.setOnClickListener {
             closeAlbums()
-            onOptionClicked?.invoke("document")   // Files â†’ existing document flow
+            onOptionClicked?.invoke("document")   // Files → existing document flow
         }
 
         // selection bar
@@ -329,12 +329,12 @@ class AttachmentPanelView @JvmOverloads constructor(
             hideDiscardPopup()
             val back = pendingCollapseFrom ?: State.MIDDLE
             pendingCollapseFrom = null
-            goState(back)   // Cancel â†’ jahan the wahin recover
+            goState(back)   // Cancel → jahan the wahin recover
         }
         btnDpDiscard.setOnClickListener {
             hideDiscardPopup()
             pendingCollapseFrom = null
-            clearSelection()   // Discard â†’ collapsed hi rahe, sirf selection clear
+            clearSelection()   // Discard → collapsed hi rahe, sirf selection clear
             hideKeyboardNow()
         }
 
@@ -356,14 +356,14 @@ class AttachmentPanelView @JvmOverloads constructor(
         }
     }
 
-    private fun toolPhase2(name: String) = toast("$name â€” option rakha hai, working phase-2")
+    private fun toolPhase2(name: String) = toast("$name — option rakha hai, working phase-2")
 
     // ---------------------------------------------------------------
     // Public API (ChatActivity-compatible)
     // ---------------------------------------------------------------
     fun isOpen(): Boolean = panelVisible
 
-    /** ChatActivity: chatMainContent pass karo â€” input bar tray ke upar push ho jaayega. */
+    /** ChatActivity: chatMainContent pass karo — input bar tray ke upar push ho jaayega. */
     fun setContentPushView(v: View) {
         contentPushView = v
         pushOriginalBottom = v.paddingBottom
@@ -438,17 +438,17 @@ class AttachmentPanelView @JvmOverloads constructor(
         if (panelH <= 0) return
         val optContent = optionsContainer.height.takeIf { it > 0 } ?: dp(210f)
         // PERMANENT RULE (user): tray ki TOTAL height = keyboard ki EXACT height
-        // (live WindowInsets se measured) â€” input box â†” keyboard switch pe BILKUL
+        // (live WindowInsets se measured) — input box ↔ keyboard switch pe BILKUL
         // NAHI hilta, har phone pe. dp number hardcode NAHI kyunki har phone ke
         // keyboard ki height alag hoti hai. (keyboard abhi tak kabhi na khuli ho
-        // â†’ fallback: options+strip fit)
+        // → fallback: options+strip fit)
         collapsedPanelPx = when {
             keyboardHeightPx > dp(120f) ->
                 min(keyboardHeightPx, (panelH * 0.72f).toInt())
             else ->
                 min(max(optContent + rowH.toInt(), dp(300f)), (panelH * 0.6f).toInt())
         }
-        // white options box = tray ka upar wala hissa (total âˆ’ dark strip row)
+        // white options box = tray ka upar wala hissa (total − dark strip row)
         val olp = optionsContainer.layoutParams as FrameLayout.LayoutParams
         val newOptH = (collapsedPanelPx - rowH.toInt()).coerceAtLeast(dp(140f))
         if (olp.height != newOptH || olp.bottomMargin != rowH.toInt()) {
@@ -569,7 +569,7 @@ class AttachmentPanelView @JvmOverloads constructor(
                 val inside = ev.rawY >= r[1] && ev.rawY <= r[1] + albumSheet.height
                 if (!inside) {
                     closeAlbums()
-                    return true // consume â€” sheet drag / select kuch nahi hoga is touch se
+                    return true // consume — sheet drag / select kuch nahi hoga is touch se
                 }
             }
             return false // album ke andar: RV/pill apna kaam sambhalte hain
@@ -592,8 +592,8 @@ class AttachmentPanelView @JvmOverloads constructor(
                 val dy = ev.y - downY
                 val dx = ev.x - downX
                 if (downZone == Zone.SHEET_BODY && currentState == State.FULL) {
-                    // FULL mein grid apna scroll karti hai â€” LEKIN grid EXACT top pe ho aur
-                    // neeche kheencho â†’ sheet drag (WhatsApp jaisa wapas-aane ka gesture)
+                    // FULL mein grid apna scroll karti hai — LEKIN grid EXACT top pe ho aur
+                    // neeche kheencho → sheet drag (WhatsApp jaisa wapas-aane ka gesture)
                     if (dy > touchSlop && abs(dy) > abs(dx) && !galleryRecycler.canScrollVertically(-1)) {
                         startTracking(ev)
                         return true
@@ -707,7 +707,7 @@ class AttachmentPanelView @JvmOverloads constructor(
         }
     }
 
-    /** Sheet position + header gradual reveal + scrim + corners â€” sab yahin sync. */
+    /** Sheet position + header gradual reveal + scrim + corners — sab yahin sync. */
     private fun updatePositions(y: Float) {
         curTop = y
         gallerySheet.translationY = y
@@ -727,7 +727,7 @@ class AttachmentPanelView @JvmOverloads constructor(
     }
 
     // ---------------------------------------------------------------
-    // RULE 3 â€” pehle COLLAPSE, phir discard POPUP
+    // RULE 3 — pehle COLLAPSE, phir discard POPUP
     // ---------------------------------------------------------------
     private fun collapseThenAsk(fromState: State) {
         if (selection.isEmpty() || fromState == State.COLLAPSED) {
@@ -763,7 +763,7 @@ class AttachmentPanelView @JvmOverloads constructor(
     }
 
     // ---------------------------------------------------------------
-    // RULE 1 & 2 â€” photo tap (multi-select, in-place)
+    // RULE 1 & 2 — photo tap (multi-select, in-place)
     // ---------------------------------------------------------------
     private fun onThumbTap(img: RecentImage) {
         val idx = selection.indexOfFirst { it.uri == img.uri }
@@ -781,7 +781,7 @@ class AttachmentPanelView @JvmOverloads constructor(
         }
         imagesAdapter.setSelection(selection.map { it.uri })
         updateSelectionBar()
-        // RULE 1: collapsed tha â†’ MIDDLE; middle/full tha â†’ state wahin (RULE 2)
+        // RULE 1: collapsed tha → MIDDLE; middle/full tha → state wahin (RULE 2)
         if (added && currentState == State.COLLAPSED) goStateInternal(State.MIDDLE, null)
     }
 
@@ -804,10 +804,8 @@ class AttachmentPanelView @JvmOverloads constructor(
         if (selection.isEmpty()) return
         val caption = etCaption.text.toString().trim()
         hideKeyboardNow()
-        // existing repo flow per-image (caption first image par; repo abhi caption store nahi karta)
-        selection.forEachIndexed { i, img ->
-            onImageSend?.invoke(img.uri, if (i == 0) caption else "")
-        }
+        // Sab selected images EK message mein jaate hain (uris list + ek caption)
+        onImageSend?.invoke(selection.map { it.uri }, caption)
         clearSelection()
         closeEditor()
         etCaption.setText("")
@@ -815,7 +813,7 @@ class AttachmentPanelView @JvmOverloads constructor(
     }
 
     // ---------------------------------------------------------------
-    // EDITOR (fullscreen preview; tools abhi placeholders â€” jaisa bola tha)
+    // EDITOR (fullscreen preview; tools abhi placeholders — jaisa bola tha)
     // ---------------------------------------------------------------
     private fun openEditor() {
         if (selection.isEmpty()) return
@@ -865,19 +863,19 @@ class AttachmentPanelView @JvmOverloads constructor(
     // ---------------------------------------------------------------
     private fun setHd(on: Boolean) {
         btnHd.isSelected = on
-        btnHd.text = if (on) "HD âœ“" else "HD"
+        btnHd.text = if (on) "HD ✓" else "HD"
         btnHd.setTextColor(if (on) 0xFF25D366.toInt() else 0xFFFFFFFF.toInt())
         syncHdChip()
     }
 
     private fun syncHdChip() {
         val on = btnHd.isSelected
-        edHd.text = if (on) "HD âœ“" else "HD"
+        edHd.text = if (on) "HD ✓" else "HD"
         edHd.setTextColor(if (on) 0xFF25D366.toInt() else 0xFFFFFFFF.toInt())
     }
 
     // ---------------------------------------------------------------
-    // Media loading (MediaStoreHelper â€” background thread, NO main-thread jank)
+    // Media loading (MediaStoreHelper — background thread, NO main-thread jank)
     // ---------------------------------------------------------------
     private fun hasMediaPermission(): Boolean {
         val perm = if (Build.VERSION.SDK_INT >= 33)
@@ -891,20 +889,20 @@ class AttachmentPanelView @JvmOverloads constructor(
         if (imagesLoading) return
         if (imagesLoaded && !force) return
         if (!hasMediaPermission()) {
-            toast("DEBUG: media permission NAHI â€” request bheja (baad mein ye toast hatana)")
+            toast("DEBUG: media permission NAHI — request bheja (baad mein ye toast hatana)")
             onRequestMediaPermission?.invoke()
             return
         }
         imagesLoading = true
         ioExecutor.execute {
-            // MediaStoreHelper synchronous hai â€” background thread pe sahi.
+            // MediaStoreHelper synchronous hai — background thread pe sahi.
             // DEBUG: ab har failure toast karega taaki pata chale data kahan atka.
             val result = runCatching { MediaStoreHelper.getAllImages(context) }
             mainHandler.post {
                 imagesLoading = false
                 result.onFailure { t ->
                     if (t is SecurityException) {
-                        toast("DEBUG: SecurityException â€” photos access blocked")
+                        toast("DEBUG: SecurityException — photos access blocked")
                         onRequestMediaPermission?.invoke()
                     } else {
                         toast("DEBUG load ERROR: ${t.javaClass.simpleName}: ${t.message}")
@@ -916,7 +914,7 @@ class AttachmentPanelView @JvmOverloads constructor(
                 imagesLoaded = true
                 buckets = MediaStoreHelper.getBuckets(loaded)
                 applyFilter()
-                // DEBUG toast (baad mein hatana): data aa raha ya nahi â€” yehi batayega
+                // DEBUG toast (baad mein hatana): data aa raha ya nahi — yehi batayega
                 toast("DEBUG: ${loaded.size} photos load hue (adapter=${imagesAdapter.itemCount})")
             }
         }
@@ -929,7 +927,7 @@ class AttachmentPanelView @JvmOverloads constructor(
     }
 
     // ---------------------------------------------------------------
-    // Recents â–¾ album picker (+ Files box) â€” toggle / outside / drag close
+    // Recents ▾ album picker (+ Files box) — toggle / outside / drag close
     // ---------------------------------------------------------------
     private fun isAlbumOpen(): Boolean = albumSheet.visibility == VISIBLE
 
@@ -955,7 +953,7 @@ class AttachmentPanelView @JvmOverloads constructor(
 
     private fun onAlbumPicked(bucket: MediaBucket) {
         selectedBucketId = if (bucket.id.isEmpty()) null else bucket.id
-        btnRecents.text = "${bucket.name} â–¾"
+        btnRecents.text = "${bucket.name} ▾"
         applyFilter()
         closeAlbums()
     }
@@ -983,7 +981,7 @@ class AttachmentPanelView @JvmOverloads constructor(
             }
         }
 
-        // list top pe ho + neeche pull â†’ sheet drag-close; warna normal scroll
+        // list top pe ho + neeche pull → sheet drag-close; warna normal scroll
         var listDownY = 0f
         var listTakingOver = false
         albumRecycler.setOnTouchListener { _, ev ->
@@ -1048,7 +1046,7 @@ class AttachmentPanelView @JvmOverloads constructor(
     }
 
     // ---------------------------------------------------------------
-    // Album list adapter (inner â€” MediaStoreHelper.getBuckets ka data)
+    // Album list adapter (inner — MediaStoreHelper.getBuckets ka data)
     // ---------------------------------------------------------------
     private class AlbumsAdapter(
         private var rows: List<MediaBucket>,

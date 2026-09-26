@@ -124,7 +124,7 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var emojiPopup: EmojiPopup
 
 
-    // Photos permission â€” grant hote hi gallery refresh hoti hai
+    // Photos permission — grant hote hi gallery refresh hoti hai
     private val requestMediaPermissionLauncher =
         registerForActivityResult(
             ActivityResultContracts.RequestPermission()
@@ -257,6 +257,26 @@ class ChatActivity : AppCompatActivity() {
         messageAdapter.isBulkReveal = true
 
         refreshMessages()
+
+
+        // Chat khulte hi latest message par aana chahiye — sirf
+        // tab skip karo jab kisi search-result par jump karna ho.
+
+        if (
+            initialJumpMessageId == null &&
+            highlightQuery == null
+        ) {
+
+            rvMessages.post {
+
+                if (messageAdapter.itemCount > 0) {
+
+                    rvMessages.scrollToPosition(
+                        messageAdapter.itemCount - 1
+                    )
+                }
+            }
+        }
     }
 
 
@@ -856,7 +876,7 @@ class ChatActivity : AppCompatActivity() {
 
 
             closeAllSessionsBanner.text =
-                "ðŸ”’  Close All Sessions (${revealedSessionIds.size})"
+                "🔒  Close All Sessions (${revealedSessionIds.size})"
 
         } else {
 
@@ -1008,6 +1028,7 @@ class ChatActivity : AppCompatActivity() {
 
                 messageAdapter.currentHighlightMessageId =
                     null
+
 
                 messageAdapter.notifyDataSetChanged()
             }
@@ -1345,9 +1366,9 @@ class ChatActivity : AppCompatActivity() {
                         if (
                             s.isNullOrBlank()
                         ) {
-                            "ðŸŽ¤"
+                            "🎤"
                         } else {
-                            "âž¤"
+                            "➤"
                         }
                 }
             }
@@ -1470,8 +1491,8 @@ class ChatActivity : AppCompatActivity() {
                 ActivePanel.NONE
             ) {
 
-                // Koi panel khula hai (paperclip/session) â†’ uska content gayab
-                // aur EMOJI content kholo (keyboard NAHI â€” icon switching jaisa)
+                // Koi panel khula hai (paperclip/session) → uska content gayab
+                // aur EMOJI content kholo (keyboard NAHI — icon switching jaisa)
                 closePanels()
 
                 if (!emojiPopup.isShowing) {
@@ -1493,7 +1514,7 @@ class ChatActivity : AppCompatActivity() {
 
         btnAttach.setOnClickListener {
 
-            // TOGGLE: paperclip panel khula hai â†’ band + keyboard wapas
+            // TOGGLE: paperclip panel khula hai → band + keyboard wapas
             // (WhatsApp jaisa); warna panel kholo.
             if (
                 currentPanel ==
@@ -1546,24 +1567,20 @@ class ChatActivity : AppCompatActivity() {
 
         // --------------------------------------------------
         // Image send from attachment panel
+        // (uris = every image the user selected, in order;
+        //  caption = the single caption box under the preview)
         // --------------------------------------------------
 
         attachmentPanel.onImageSend =
-            { uri, caption ->
+            { uris, caption ->
 
-                /*
-                 * Existing app's current image-message
-                 * format is preserved.
-                 *
-                 * Caption is currently not added to the
-                 * database because the existing Message/
-                 * MessageRepository format supplied earlier
-                 * has no caption field.
-                 */
+                val imgText =
+                    "IMG::" + uris.joinToString("||") { it.toString() }
 
                 MessageRepository.addMessage(
                     chatId,
-                    "IMG::$uri"
+                    imgText,
+                    caption.ifBlank { null }
                 )
 
 
@@ -1574,7 +1591,7 @@ class ChatActivity : AppCompatActivity() {
 
 
         // --------------------------------------------------
-        // Attachment panel â€” permission / push / option cells
+        // Attachment panel — permission / push / option cells
         // --------------------------------------------------
 
         attachmentPanel.onRequestMediaPermission =
@@ -1593,7 +1610,7 @@ class ChatActivity : AppCompatActivity() {
 
                 Toast.makeText(
                     this,
-                    "$optionId â€” wiring phase 2",
+                    "$optionId — wiring phase 2",
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -1737,7 +1754,7 @@ class ChatActivity : AppCompatActivity() {
 
 
         btnEmoji.text =
-            "ðŸ˜Š"
+            "😊"
 
 
         updateIconHighlight()

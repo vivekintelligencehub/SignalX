@@ -779,7 +779,7 @@ class AttachmentPanelView @JvmOverloads constructor(
             selection.add(img)
             added = true
         }
-        imagesAdapter.setSelection(selection.map { it.uri })
+        imagesAdapter.updateSelection(selection.map { it.uri })
         updateSelectionBar()
         // RULE 1: collapsed tha → MIDDLE; middle/full tha → state wahin (RULE 2)
         if (added && currentState == State.COLLAPSED) goStateInternal(State.MIDDLE, null)
@@ -787,7 +787,7 @@ class AttachmentPanelView @JvmOverloads constructor(
 
     private fun clearSelection() {
         selection.clear()
-        imagesAdapter.setSelection(emptyList())
+        imagesAdapter.updateSelection(emptyList<Uri>())
         updateSelectionBar()
     }
 

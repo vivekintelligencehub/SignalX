@@ -36,7 +36,7 @@
 <LinearLayout android:id="@+id/selectionBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_gravity="bottom" android:background="#11181C" android:gravity="center_vertical" android:minHeight="64dp" android:orientation="horizontal" android:paddingStart="12dp" android:paddingTop="8dp" android:paddingEnd="12dp" android:paddingBottom="8dp" android:visibility="gone">
 <FrameLayout android:layout_width="44dp" android:layout_height="44dp">
 <ImageView android:id="@+id/barThumb" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="centerCrop" android:background="#2A3942"/>
-<TextView android:layout_width="match_parent" android:layout_height="match_parent" android:background="#55000000" android:clickable="true" android:focusable="true" android:gravity="center" android:text="✏️" android:textSize="15sp"/>
+<TextView android:layout_width="match_parent" android:layout_height="match_parent" android:background="#55000000" android:gravity="center" android:text="✏️" android:textSize="15sp"/>
 </FrameLayout>
 <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="10dp" android:layout_marginEnd="10dp" android:layout_weight="1" android:background="@drawable/bg_caption_field" android:gravity="center_vertical" android:orientation="horizontal" android:paddingStart="8dp" android:paddingEnd="14dp">
 <TextView android:id="@+id/capEmoji" android:layout_width="36dp" android:layout_height="36dp" android:gravity="center" android:text="😊" android:textSize="17sp"/>

@@ -148,7 +148,11 @@ class AttachmentPanelView @JvmOverloads constructor(
 
     private val fullTop: Float get() = 0f
     private val middleTop: Float get() = panelH * 0.35f
-    private val collapsedTop: Float get() = panelH - rowH - headerH
+    // COLLAPSED ka top ab collapsedPanelPx (keyboard-height-aware) SE hi
+    // aata hai — pehle yeh alag formula (rowH+headerH) use karta tha jo
+    // collapsedPanelPx se match nahi karta tha, isi mismatch ki wajah se
+    // options ke neeche extra WHITE GAP bach jaata tha.
+    private val collapsedTop: Float get() = panelH - collapsedPanelPx.toFloat()
     private val hiddenTop: Float get() = panelH.toFloat()
 
     private var curTop = 0f
@@ -448,11 +452,15 @@ class AttachmentPanelView @JvmOverloads constructor(
             else ->
                 min(max(optContent + rowH.toInt(), dp(300f)), (panelH * 0.6f).toInt())
         }
-        // white options box = tray ka upar wala hissa (total − dark strip row)
+        // White options box apni NATURAL height (icons ka content) leta hai —
+        // pehle yahan keyboard-height se ek FORCED height di jaati thi, jo
+        // content se badi hoti thi aur neeche khaali WHITE GAP bacha deti thi.
+        // Bas itna bottomMargin chhodo ki 1 row thumbnails niche se jhalke;
+        // bacha hua collapsedPanelPx area gallery ki thumbnail-rows khud bhar
+        // legi (collapsedTop ab isi collapsedPanelPx par based hai, upar dekho).
         val olp = optionsContainer.layoutParams as FrameLayout.LayoutParams
-        val newOptH = (collapsedPanelPx - rowH.toInt()).coerceAtLeast(dp(140f))
-        if (olp.height != newOptH || olp.bottomMargin != rowH.toInt()) {
-            olp.height = newOptH
+        if (olp.height != LinearLayout.LayoutParams.WRAP_CONTENT || olp.bottomMargin != rowH.toInt()) {
+            olp.height = LinearLayout.LayoutParams.WRAP_CONTENT
             olp.bottomMargin = rowH.toInt()
             optionsContainer.layoutParams = olp
         }
@@ -575,8 +583,13 @@ class AttachmentPanelView @JvmOverloads constructor(
             return false // album ke andar: RV/pill apna kaam sambhalte hain
         }
         if (discardPopup.visibility == VISIBLE) {
-            // popup ke time drag/select block (popup ke apne buttons kaam karenge)
-            return ev.actionMasked != MotionEvent.ACTION_DOWN
+            // Popup ke apne buttons (Cancel/Discard) sab kuch khud sambhalte
+            // hain — parent (yeh view) kabhi bhi intercept na kare. Pehle
+            // yahan sirf ACTION_DOWN chhoda jaata tha aur UP intercept ho
+            // jaata tha, jisse button ka click kabhi fire hi nahi hota tha
+            // aur popup automatically dobara khul jaata tha (RULE 3 phir se
+            // trigger ho jaata) — isi ki wajah se "baar baar aa raha hai" bug tha.
+            return false
         }
 
         when (ev.actionMasked) {
@@ -611,6 +624,19 @@ class AttachmentPanelView @JvmOverloads constructor(
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (!panelVisible) return false
+
+        // Popup khula ho to iske apne buttons (Cancel/Discard) sambhalte
+        // hain — yahan kuch consume mat karo.
+        if (discardPopup.visibility == VISIBLE) return false
+
+        // Touch asli input-bar / paperclip / switch-icon ke area mein hai
+        // (jo is panel ke apne content — options/gallery/bar — se BAHAR hai).
+        // Isse neeche waali asli view (chatMainContent, jahan real buttons
+        // hain) tak jaane do, khud claim mat karo — warna paperclip dobara
+        // dabane par band nahi hoti, switch-icon aur message-input bhi kaam
+        // nahi karte the isi wajah se.
+        if (downZone == Zone.OUTSIDE) return false
+
         when (event.actionMasked) {
             MotionEvent.ACTION_MOVE -> {
                 velocityTracker?.addMovement(event)

@@ -81,7 +81,7 @@
     android:exported="false" />
         
         <activity
-    android:name=".ImageViewerActivity"
+    android:name=".ImageViewActivity"
     android:exported="false"
     android:theme="@style/Theme.SignalX" />
         

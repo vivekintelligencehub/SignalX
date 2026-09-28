@@ -148,7 +148,7 @@ class AttachmentPanelView @JvmOverloads constructor(
 
     private val fullTop: Float get() = 0f
     private val middleTop: Float get() = panelH * 0.35f
-    // COLLAPSED ka top ab collapsedPanelPx (keyboard-height-aware) SE hi
+    // COLLAPSED ka top collapsedPanelPx (keyboard-height-aware) SE hi
     // aata hai — pehle yeh alag formula (rowH+headerH) use karta tha jo
     // collapsedPanelPx se match nahi karta tha, isi mismatch ki wajah se
     // options ke neeche extra WHITE GAP bach jaata tha.
@@ -441,23 +441,18 @@ class AttachmentPanelView @JvmOverloads constructor(
     private fun applySizing() {
         if (panelH <= 0) return
         val optContent = optionsContainer.height.takeIf { it > 0 } ?: dp(210f)
-        // PERMANENT RULE (user): tray ki TOTAL height = keyboard ki EXACT height
-        // (live WindowInsets se measured) — input box ↔ keyboard switch pe BILKUL
-        // NAHI hilta, har phone pe. dp number hardcode NAHI kyunki har phone ke
-        // keyboard ki height alag hoti hai. (keyboard abhi tak kabhi na khuli ho
-        // → fallback: options+strip fit)
+        // Jab tak keyboard kabhi khuli na ho (fresh open), session-panel
+        // (jiska white box 260dp FIXED hai) jaisa hi size use karo — usse
+        // zyada bada nahi dikhna chahiye. Pehle yahan 60% tak ki height ban
+        // jaati thi, jisse gallery bahut UPAR tak dikhne lagti thi aur
+        // options ke neeche extra khaali white bhi bach jaata tha.
         collapsedPanelPx = when {
             keyboardHeightPx > dp(120f) ->
                 min(keyboardHeightPx, (panelH * 0.72f).toInt())
             else ->
-                min(max(optContent + rowH.toInt(), dp(300f)), (panelH * 0.6f).toInt())
+                (optContent + rowH.toInt()).coerceIn(dp(200f), dp(260f))
         }
-        // White options box apni NATURAL height (icons ka content) leta hai —
-        // pehle yahan keyboard-height se ek FORCED height di jaati thi, jo
-        // content se badi hoti thi aur neeche khaali WHITE GAP bacha deti thi.
-        // Bas itna bottomMargin chhodo ki 1 row thumbnails niche se jhalke;
-        // bacha hua collapsedPanelPx area gallery ki thumbnail-rows khud bhar
-        // legi (collapsedTop ab isi collapsedPanelPx par based hai, upar dekho).
+        // White options box apni NATURAL height (icons ka content) leta hai.
         val olp = optionsContainer.layoutParams as FrameLayout.LayoutParams
         if (olp.height != LinearLayout.LayoutParams.WRAP_CONTENT || olp.bottomMargin != rowH.toInt()) {
             olp.height = LinearLayout.LayoutParams.WRAP_CONTENT
@@ -470,7 +465,15 @@ class AttachmentPanelView @JvmOverloads constructor(
             slp.bottomMargin = collapsedPanelPx
             scrimView.layoutParams = slp
         }
-        albumHeightPx = (panelH * 0.56f).toInt()
+        // Album list ki height current sheet-state ke hisaab se — FULL mein
+        // poori jagah use kare, MIDDLE mein pehle jaisi chhoti. Pehle yeh
+        // hamesha fixed 56% rehti thi, isliye FULL screen se khola tab bhi
+        // MIDDLE jaisi hi dikhti thi.
+        albumHeightPx = if (currentState == State.FULL) {
+            (panelH * 0.88f).toInt()
+        } else {
+            (panelH * 0.56f).toInt()
+        }
         val alp = albumSheet.layoutParams as FrameLayout.LayoutParams
         if (alp.height != albumHeightPx) {
             alp.height = albumHeightPx
@@ -584,11 +587,7 @@ class AttachmentPanelView @JvmOverloads constructor(
         }
         if (discardPopup.visibility == VISIBLE) {
             // Popup ke apne buttons (Cancel/Discard) sab kuch khud sambhalte
-            // hain — parent (yeh view) kabhi bhi intercept na kare. Pehle
-            // yahan sirf ACTION_DOWN chhoda jaata tha aur UP intercept ho
-            // jaata tha, jisse button ka click kabhi fire hi nahi hota tha
-            // aur popup automatically dobara khul jaata tha (RULE 3 phir se
-            // trigger ho jaata) — isi ki wajah se "baar baar aa raha hai" bug tha.
+            // hain — parent (yeh view) kabhi bhi intercept na kare.
             return false
         }
 
@@ -625,16 +624,13 @@ class AttachmentPanelView @JvmOverloads constructor(
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (!panelVisible) return false
 
-        // Popup khula ho to iske apne buttons (Cancel/Discard) sambhalte
-        // hain — yahan kuch consume mat karo.
+        // Popup khula ho to iske apne buttons sambhalte hain — yahan kuch
+        // consume mat karo.
         if (discardPopup.visibility == VISIBLE) return false
 
         // Touch asli input-bar / paperclip / switch-icon ke area mein hai
-        // (jo is panel ke apne content — options/gallery/bar — se BAHAR hai).
-        // Isse neeche waali asli view (chatMainContent, jahan real buttons
-        // hain) tak jaane do, khud claim mat karo — warna paperclip dobara
-        // dabane par band nahi hoti, switch-icon aur message-input bhi kaam
-        // nahi karte the isi wajah se.
+        // (jo panel ke apne content se bahar hai) — use neeche waali asli
+        // view (chatMainContent) tak jaane do, khud mat pakdo.
         if (downZone == Zone.OUTSIDE) return false
 
         when (event.actionMasked) {
@@ -959,10 +955,29 @@ class AttachmentPanelView @JvmOverloads constructor(
 
     private fun openAlbums() {
         if (!imagesLoaded) return
+
+        // Sheet abhi jis state (MIDDLE/FULL) mein hai usi ke hisaab se album
+        // ki height turant recompute karo (applySizing() ka intezaar mat karo) —
+        // pehle yeh hamesha MIDDLE jaisi fixed rehti thi, FULL se khola tab bhi.
+        albumHeightPx = if (currentState == State.FULL) {
+            (panelH * 0.88f).toInt()
+        } else {
+            (panelH * 0.56f).toInt()
+        }
+        val alp = albumSheet.layoutParams as FrameLayout.LayoutParams
+        alp.height = albumHeightPx
+        albumSheet.layoutParams = alp
+
         val rows = mutableListOf<MediaBucket>()
         rows.add(MediaBucket("", "Recents", allImages.firstOrNull()?.uri, allImages.size))
         rows.addAll(buckets)
         albumsAdapter.submit(rows, selectedBucketId)
+
+        // Har baar khulte waqt list TOP (Recents) par hi dikhe — pehle jahan
+        // chhoda tha wahin se dikhta tha.
+        (albumRecycler.layoutManager as? androidx.recyclerview.widget.LinearLayoutManager)
+            ?.scrollToPositionWithOffset(0, 0)
+
         albumSheet.visibility = VISIBLE
         albumSheet.post {
             albumSheet.translationY = albumHeightPx.toFloat()

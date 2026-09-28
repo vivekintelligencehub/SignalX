@@ -91,6 +91,11 @@ class ChatActivity : AppCompatActivity() {
 
     private var hasScrolledToInitialHighlight = false
 
+    // Chat sirf PEHLI baar khulte hi latest message par jaani chahiye —
+    // agar user image dekhne gaya tha aur wapas aaya hai, scroll position
+    // wahi rehni chahiye, latest par dobara jump nahi hona chahiye.
+    private var hasScrolledToLatestOnOpen = false
+
 
     private lateinit var highlightBanner: TextView
     private lateinit var highlightNavContainer: View
@@ -219,18 +224,29 @@ class ChatActivity : AppCompatActivity() {
             window.decorView
         ) { _, insets ->
 
+            val imeVisible =
+                insets.isVisible(
+                    WindowInsetsCompat.Type.ime()
+                )
+
+
             attachmentPanel.keyboardHeightPx =
-                if (
-                    insets.isVisible(
-                        WindowInsetsCompat.Type.ime()
-                    )
-                ) {
+                if (imeVisible) {
                     insets.getInsets(
                         WindowInsetsCompat.Type.ime()
                     ).bottom
                 } else {
                     0
                 }
+
+
+            // Keyboard khulte hi latest message uske UPAR hi dikhna
+            // chahiye — warna keyboard usko dhak leta hai.
+
+            if (imeVisible) {
+                scrollToBottom()
+            }
+
 
             insets
         }
@@ -259,13 +275,18 @@ class ChatActivity : AppCompatActivity() {
         refreshMessages()
 
 
-        // Chat khulte hi latest message par aana chahiye — sirf
-        // tab skip karo jab kisi search-result par jump karna ho.
+        // Chat sirf PEHLI baar khulte hi latest message par aana chahiye —
+        // agar user kisi image ko dekhne gaya tha ya kisi aur activity mein
+        // gaya tha aur wapas aaya hai, uski scroll position wahi rehni
+        // chahiye jahan woh thi, latest par dobara jump nahi hona chahiye.
 
         if (
+            !hasScrolledToLatestOnOpen &&
             initialJumpMessageId == null &&
             highlightQuery == null
         ) {
+
+            hasScrolledToLatestOnOpen = true
 
             rvMessages.post {
 

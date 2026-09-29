@@ -160,6 +160,13 @@ class AttachmentPanelView @JvmOverloads constructor(
     private var panelVisible = false
     private var openingClosing = false
 
+    // Har animation-start par yeh badhta hai. onAnimationEnd callback tabhi
+    // kuch karega jab woh AB BHI sabse LATEST animation ho — warna ek
+    // CANCEL ho chuka (purana) animation ka late-callback state ko galat
+    // kar sakta tha (isi se paperclip dobara kholne par size chhota ho
+    // jaana / seedha MIDDLE khul jaana jaise bugs aate the).
+    private var animGeneration = 0
+
     private val touchSlop by lazy { ViewConfiguration.get(context).scaledTouchSlop }
     private var downX = 0f
     private var downY = 0f
@@ -383,6 +390,10 @@ class AttachmentPanelView @JvmOverloads constructor(
             return
         }
         panelVisible = true
+        // Fresh open hamesha COLLAPSED se hi shuru ho — kisi purani
+        // (abhi-cancel-hui) animation ki wajah se state kabhi bhi stale
+        // MIDDLE/FULL na reh jaaye.
+        currentState = State.COLLAPSED
         visibility = VISIBLE
         onPanelVisibilityChanged?.invoke(true)
         loadImagesIfNeeded(force = false)
@@ -400,6 +411,9 @@ class AttachmentPanelView @JvmOverloads constructor(
         hideDiscardPopup()
         clearSelection()
         pendingCollapseFrom = null
+        // Turant reset — animation ke end hone ka wait nahi karna, taaki
+        // agar user turant dobara paperclip dabaye, state already sahi ho.
+        currentState = State.COLLAPSED
         animateOpenClose(opening = false)
     }
 
@@ -443,9 +457,7 @@ class AttachmentPanelView @JvmOverloads constructor(
         val optContent = optionsContainer.height.takeIf { it > 0 } ?: dp(210f)
         // Jab tak keyboard kabhi khuli na ho (fresh open), session-panel
         // (jiska white box 260dp FIXED hai) jaisa hi size use karo — usse
-        // zyada bada nahi dikhna chahiye. Pehle yahan 60% tak ki height ban
-        // jaati thi, jisse gallery bahut UPAR tak dikhne lagti thi aur
-        // options ke neeche extra khaali white bhi bach jaata tha.
+        // zyada bada nahi dikhna chahiye.
         collapsedPanelPx = when {
             keyboardHeightPx > dp(120f) ->
                 min(keyboardHeightPx, (panelH * 0.72f).toInt())
@@ -465,10 +477,7 @@ class AttachmentPanelView @JvmOverloads constructor(
             slp.bottomMargin = collapsedPanelPx
             scrimView.layoutParams = slp
         }
-        // Album list ki height current sheet-state ke hisaab se — FULL mein
-        // poori jagah use kare, MIDDLE mein pehle jaisi chhoti. Pehle yeh
-        // hamesha fixed 56% rehti thi, isliye FULL screen se khola tab bhi
-        // MIDDLE jaisi hi dikhti thi.
+        // Album list ki height current sheet-state ke hisaab se.
         albumHeightPx = if (currentState == State.FULL) {
             (panelH * 0.88f).toInt()
         } else {
@@ -506,6 +515,7 @@ class AttachmentPanelView @JvmOverloads constructor(
     // ---------------------------------------------------------------
     private fun animateOpenClose(opening: Boolean) {
         animator?.cancel()
+        val myGen = ++animGeneration
         openingClosing = true
 
         val fromTop = curTop
@@ -520,6 +530,7 @@ class AttachmentPanelView @JvmOverloads constructor(
             duration = 240
             interpolator = DecelerateInterpolator(1.4f)
             addUpdateListener { a ->
+                if (myGen != animGeneration) return@addUpdateListener
                 val t = a.animatedValue as Float
                 updatePositions(fromTop + (toTop - fromTop) * t)
                 optionsContainer.alpha = optFrom + (optTo - optFrom) * t
@@ -530,6 +541,10 @@ class AttachmentPanelView @JvmOverloads constructor(
             }
             addListener(object : AnimatorListenerAdapter() {
                 override fun onAnimationEnd(animation: Animator) {
+                    // Yeh ab STALE hai agar ek naya open/close beech mein
+                    // shuru ho chuka hai — tab kuch mat karo, warna yeh
+                    // purana callback naye panel ki size/state bigaad dega.
+                    if (myGen != animGeneration) return
                     openingClosing = false
                     if (opening) {
                         currentState = State.COLLAPSED
@@ -703,6 +718,7 @@ class AttachmentPanelView @JvmOverloads constructor(
 
     private fun goStateInternal(state: State, onEnd: (() -> Unit)?) {
         animator?.cancel()
+        val myGen = ++animGeneration
         val from = curTop
         val to = topOf(state)
         galleryRecycler.suppressLayout(false) // not used anymore; scroll lock gridScrollLocked se hota hai
@@ -717,9 +733,13 @@ class AttachmentPanelView @JvmOverloads constructor(
         animator = ValueAnimator.ofFloat(0f, 1f).apply {
             duration = (170 + (dist / panelH.coerceAtLeast(1)) * 160).toLong().coerceIn(170, 340)
             interpolator = DecelerateInterpolator(1.5f)
-            addUpdateListener { a -> updatePositions(from + (to - from) * (a.animatedValue as Float)) }
+            addUpdateListener { a ->
+                if (myGen != animGeneration) return@addUpdateListener
+                updatePositions(from + (to - from) * (a.animatedValue as Float))
+            }
             addListener(object : AnimatorListenerAdapter() {
                 override fun onAnimationEnd(animation: Animator) {
+                    if (myGen != animGeneration) return
                     currentState = state
                     updatePositions(to)
                     onEnd?.invoke()

@@ -915,9 +915,22 @@ class ChatActivity : AppCompatActivity() {
                 messageAdapter.itemCount > 0
             ) {
 
-                rvMessages.smoothScrollToPosition(
-                    messageAdapter.itemCount - 1
-                )
+                // Thoda delay — keyboard/window ka resize poora hone ka
+                // wait karte hain, warna RecyclerView apni PURANI (bade)
+                // height se scroll-target calculate kar leta hai aur
+                // aakhri message ka thoda hissa keyboard ke neeche chhup
+                // jaata hai.
+
+                rvMessages.postDelayed({
+
+                    if (messageAdapter.itemCount > 0) {
+
+                        rvMessages.smoothScrollToPosition(
+                            messageAdapter.itemCount - 1
+                        )
+                    }
+
+                }, 90L)
             }
         }
     }

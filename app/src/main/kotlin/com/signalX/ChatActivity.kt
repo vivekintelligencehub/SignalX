@@ -240,14 +240,6 @@ class ChatActivity : AppCompatActivity() {
                 }
 
 
-            // Keyboard khulte hi latest message uske UPAR hi dikhna
-            // chahiye — warna keyboard usko dhak leta hai.
-
-            if (imeVisible) {
-                scrollToBottom()
-            }
-
-
             insets
         }
     }
@@ -669,6 +661,32 @@ class ChatActivity : AppCompatActivity() {
 
         rvMessages.adapter =
             messageAdapter
+
+
+        // Jab bhi chat-list ki height ghate (keyboard khule ya paperclip panel khule),
+        // content ko utna hi upar scroll kar do jitni height ghati — isse jo message
+        // list ke bottom par dikh raha tha woh keyboard/panel ke UPAR hi dikhta rehta hai
+        // (WhatsApp jaisa), keyboard ke neeche nahi chhupta.
+
+        rvMessages.addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
+
+            val newHeight = bottom - top
+            val oldHeight = oldBottom - oldTop
+
+            if (
+                oldHeight > 0 &&
+                newHeight > 0 &&
+                newHeight < oldHeight
+            ) {
+
+                val shrinkBy = oldHeight - newHeight
+
+                rvMessages.post {
+
+                    rvMessages.scrollBy(0, shrinkBy)
+                }
+            }
+        }
     }
 
 
@@ -1647,6 +1665,26 @@ class ChatActivity : AppCompatActivity() {
                     "$optionId — wiring phase 2",
                     Toast.LENGTH_SHORT
                 ).show()
+            }
+
+
+        // Panel khud band ho jaye (neeche drag karke ya back se) to ChatActivity ko
+        // bhi pata chale — warna paperclip highlighted rehta tha aur dobara dabane par
+        // panel ki jagah keyboard khulta tha.
+
+        attachmentPanel.onPanelVisibilityChanged =
+            { visible ->
+
+                if (
+                    !visible &&
+                    currentPanel == ActivePanel.ATTACH
+                ) {
+
+                    currentPanel =
+                        ActivePanel.NONE
+
+                    updateIconHighlight()
+                }
             }
     }
 

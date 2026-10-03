@@ -39,14 +39,13 @@ import kotlin.math.min
 /**
  * AttachmentPanelView — WhatsApp-style 3-stage attachment panel.
  *
- * GEOMETRY (is version mein):
+ * GEOMETRY:
  *   TRAY = keyboard ki EXACT height (panel khud window-resize se naapta hai aur save kar leta hai).
  *   Tray ke UPAR wala hissa = white options box (natural height),
  *   uske BILKUL neeche = photos ki jhalak (grid ka top options ke bottom se milta hai).
- *   Isse na photos options ko dhakti hain, na input box keyboard ke mukable hilta hai.
  *
  * STATES:
- *   COLLAPSED → options + neeche photos ki jhalak
+ *   COLLAPSED → options + neeche photos ki jhalak (hamesha Recents + latest photos)
  *   MIDDLE    → gallery sheet options ke UPAR glide karti hai
  *   FULL      → poori screen; grid scroll
  *
@@ -156,7 +155,11 @@ class AttachmentPanelView @JvmOverloads constructor(
     private var curTop = 0f
     private var currentState = State.COLLAPSED
     private var panelVisible = false
-    private var openingClosing = false
+
+    // Animation / drag flags (inme se koi bhi true ho to sizing positions ko nahi chhedti)
+    private var openingClosing = false   // open/close animation chal rahi hai
+    private var stateAnimating = false   // collapsed/middle/full animation chal rahi hai
+    private var dragging = false         // finger se sheet drag ho rahi hai
 
     // Har naye animation par badhta hai — purane (cancel hue) animation ka late callback
     // naye panel ki state/size ko kharab na kar sake.
@@ -348,6 +351,7 @@ class AttachmentPanelView @JvmOverloads constructor(
             hideDiscardPopup()
             pendingCollapseFrom = null
             clearSelection()   // Discard → collapsed hi rahe, sirf selection clear
+            resetGalleryToLatest()
             hideKeyboardNow()
         }
 
@@ -402,6 +406,9 @@ class AttachmentPanelView @JvmOverloads constructor(
             return
         }
 
+        stopTracking()          // koi purana adhura drag state na bachhe
+        resetGalleryToLatest()  // hamesha Recents + latest photos se shuru
+
         applySizing()   // panelVisible abhi false hai → push/position nahi chhedta
 
         panelVisible = true
@@ -419,11 +426,13 @@ class AttachmentPanelView @JvmOverloads constructor(
     fun hidePanel() {
         if (!panelVisible) return
         panelVisible = false
+        stopTracking()
         closeEditor()
         closeAlbums()
         hideDiscardPopup()
         clearSelection()
         pendingCollapseFrom = null
+        resetGalleryToLatest()   // band hote hi Recents + latest photos par wapas
         currentState = State.COLLAPSED
         // ChatActivity ko TURANT batao (drag-dismiss / back se band hua ho tab bhi),
         // warna paperclip highlighted rehta tha aur dobara dabane par keyboard khulta tha.
@@ -455,6 +464,25 @@ class AttachmentPanelView @JvmOverloads constructor(
             State.MIDDLE -> { goState(State.COLLAPSED); true }
             State.COLLAPSED -> { hidePanel(); true }
         }
+    }
+
+    // ---------------------------------------------------------------
+    // Gallery default: Recents + latest photos
+    // ---------------------------------------------------------------
+    /** Album filter hatao ("Recents") aur grid ko sabse upar (latest photo) par le aao. */
+    private fun resetGalleryToLatest() {
+        if (selectedBucketId != null) {
+            selectedBucketId = null
+            btnRecents.text = "Recents ▾"
+            if (imagesLoaded) applyFilter()
+        }
+        (galleryRecycler.layoutManager as? androidx.recyclerview.widget.LinearLayoutManager)
+            ?.scrollToPositionWithOffset(0, 0)
+    }
+
+    /** COLLAPSED par pahunchte hi (selection ka sawal na ho to) default gallery wapas. */
+    private fun onReachedCollapsed() {
+        if (selection.isEmpty() && pendingCollapseFrom == null) resetGalleryToLatest()
     }
 
     // ---------------------------------------------------------------
@@ -565,7 +593,7 @@ class AttachmentPanelView @JvmOverloads constructor(
         }
 
         // Animation / drag chal raha ho to positions usi ko sambhalne do (woh LIVE geometry use karte hain)
-        val busy = animator?.isRunning == true || velocityTracker != null
+        val busy = openingClosing || stateAnimating || dragging
         if (!busy) {
             curTop = if (panelVisible) topOf(currentState) else hiddenTop
             updatePositions(curTop)
@@ -598,6 +626,7 @@ class AttachmentPanelView @JvmOverloads constructor(
         animator?.cancel()
         val myGen = ++animGeneration
         openingClosing = true
+        stateAnimating = false
 
         val startTopFrac = if (panelH > 0) curTop / panelH else 1f
         val pushStart = ((contentPushView?.paddingBottom ?: 0) - pushOriginalBottom).coerceAtLeast(0)
@@ -636,6 +665,8 @@ class AttachmentPanelView @JvmOverloads constructor(
                     currentState = State.COLLAPSED
                     gridScrollLocked = true
                     applySizing()
+                    // Keyboard band hone se window baad mein badi ho sakti hai — phir se sahi baithao
+                    postDelayed({ applySizing() }, 350)
                 } else {
                     visibility = GONE
                     currentState = State.COLLAPSED
@@ -672,7 +703,20 @@ class AttachmentPanelView @JvmOverloads constructor(
     }
 
     override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
-        if (!panelVisible || openingClosing || editorOpen) return false
+        if (!panelVisible || editorOpen) return false
+
+        // Har DOWN par zone/start-values TAAZA record karo — animation chal rahi ho tab bhi,
+        // warna purane (stale) values se tap ko drag samajh liya jaata tha.
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
+            downX = ev.x
+            downY = ev.y
+            dragStartTop = curTop
+            dragStartState = currentState
+            downZone = zoneAt(ev.x, ev.y)
+        }
+
+        // Open/close animation ke dauran drag shuru nahi hota
+        if (openingClosing) return false
 
         // album khuli ho to BAHAR ka pehla touch = sirf album band (consume)
         if (isAlbumOpen()) {
@@ -690,46 +734,57 @@ class AttachmentPanelView @JvmOverloads constructor(
         // Popup ke apne buttons (Cancel/Discard) sab kuch khud sambhalte hain
         if (discardPopup.visibility == VISIBLE) return false
 
-        when (ev.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                downX = ev.x
-                downY = ev.y
-                dragStartTop = curTop
-                dragStartState = currentState
-                downZone = zoneAt(ev.x, ev.y)
-            }
-            MotionEvent.ACTION_MOVE -> {
-                if (downZone == Zone.OUTSIDE || downZone == Zone.BAR) return false
-                val dy = ev.y - downY
-                val dx = ev.x - downX
-                if (downZone == Zone.SHEET_BODY && currentState == State.FULL) {
-                    // FULL mein grid apna scroll karti hai — LEKIN grid EXACT top pe ho aur
-                    // neeche kheencho → sheet drag
-                    if (dy > touchSlop && abs(dy) > abs(dx) && !galleryRecycler.canScrollVertically(-1)) {
-                        startTracking(ev)
-                        return true
-                    }
-                    return false
-                }
-                if (abs(dy) > touchSlop && abs(dy) > abs(dx)) {
+        if (ev.actionMasked == MotionEvent.ACTION_MOVE) {
+            if (downZone == Zone.OUTSIDE || downZone == Zone.BAR) return false
+            val dy = ev.y - downY
+            val dx = ev.x - downX
+            if (downZone == Zone.SHEET_BODY && currentState == State.FULL) {
+                // FULL mein grid apna scroll karti hai — LEKIN grid EXACT top pe ho aur
+                // neeche kheencho → sheet drag
+                if (dy > touchSlop && abs(dy) > abs(dx) && !galleryRecycler.canScrollVertically(-1)) {
                     startTracking(ev)
                     return true
                 }
+                return false
+            }
+            if (abs(dy) > touchSlop && abs(dy) > abs(dx)) {
+                startTracking(ev)
+                return true
             }
         }
         return false
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (!panelVisible) return false
-
-        if (discardPopup.visibility == VISIBLE) return false
+        if (!panelVisible || discardPopup.visibility == VISIBLE) {
+            if (dragging) stopTracking()
+            return false
+        }
 
         // Touch asli input-bar / paperclip / switch-icon ke area mein hai — neeche waali
         // asli view tak jaane do, khud claim mat karo.
         if (downZone == Zone.OUTSIDE) return false
 
-        when (event.actionMasked) {
+        val action = event.actionMasked
+
+        if (!dragging) {
+            // Sirf tap / blank-area touch — drag shuru hi nahi hua. Animation ke dauran ya
+            // sirf tap par KUCH mat karo (pehle yahi tap sheet ko MIDDLE mein settle kar deta tha).
+            // Drag tabhi shuru karo jab finger sach mein vertical hile.
+            if (action == MotionEvent.ACTION_MOVE && !openingClosing && downZone != Zone.BAR) {
+                val dy = event.y - downY
+                val dx = event.x - downX
+                if (abs(dy) > touchSlop && abs(dy) > abs(dx)) {
+                    startTracking(event)
+                } else {
+                    return true
+                }
+            } else {
+                return true
+            }
+        }
+
+        when (action) {
             MotionEvent.ACTION_MOVE -> {
                 velocityTracker?.addMovement(event)
                 val newTop = dragStartTop + (event.y - downY)
@@ -743,7 +798,7 @@ class AttachmentPanelView @JvmOverloads constructor(
                     vy = it.yVelocity
                 }
                 stopTracking()
-                settle(curTop, if (event.actionMasked == MotionEvent.ACTION_UP) vy else 0f, dragStartState)
+                settle(curTop, if (action == MotionEvent.ACTION_UP) vy else 0f, dragStartState)
             }
         }
         return true
@@ -753,11 +808,13 @@ class AttachmentPanelView @JvmOverloads constructor(
         stopTracking()
         velocityTracker = VelocityTracker.obtain()
         velocityTracker?.addMovement(ev)
+        dragging = true
     }
 
     private fun stopTracking() {
         velocityTracker?.recycle()
         velocityTracker = null
+        dragging = false
     }
 
     private fun settle(y: Float, vy: Float, startedFrom: State) {
@@ -801,6 +858,7 @@ class AttachmentPanelView @JvmOverloads constructor(
         animator?.cancel()
         val myGen = ++animGeneration
         openingClosing = false
+        stateAnimating = false
         gridScrollLocked = state != State.FULL
 
         val startFrac = if (panelH > 0) curTop / panelH else 0f
@@ -810,9 +868,12 @@ class AttachmentPanelView @JvmOverloads constructor(
         if (abs(to - from) < 1f) {
             currentState = state
             updatePositions(to)
+            if (state == State.COLLAPSED) onReachedCollapsed()
             onEnd?.invoke()
             return
         }
+
+        stateAnimating = true
 
         val dist = abs(to - from)
         val anim = ValueAnimator.ofFloat(0f, 1f)
@@ -828,9 +889,11 @@ class AttachmentPanelView @JvmOverloads constructor(
         anim.addListener(object : AnimatorListenerAdapter() {
             override fun onAnimationEnd(animation: Animator) {
                 if (myGen != animGeneration) return
+                stateAnimating = false
                 animator = null
                 currentState = state
                 updatePositions(topOf(state))
+                if (state == State.COLLAPSED) onReachedCollapsed()
                 onEnd?.invoke()
             }
         })
@@ -897,6 +960,9 @@ class AttachmentPanelView @JvmOverloads constructor(
     // RULE 1 & 2 — photo tap (multi-select, in-place)
     // ---------------------------------------------------------------
     private fun onThumbTap(img: RecentImage) {
+        // Panel khul/band ho raha ho tab anjaane mein hui tap ko ignore karo
+        if (openingClosing) return
+
         val idx = selection.indexOfFirst { it.uri == img.uri }
         val added: Boolean
         if (idx >= 0) {

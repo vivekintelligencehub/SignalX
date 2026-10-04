@@ -5,11 +5,13 @@ import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.Gravity
@@ -53,6 +55,9 @@ import kotlin.math.min
  *   RULE 1: COLLAPSED mein photo tap  → select + sheet MIDDLE
  *   RULE 2: MIDDLE/FULL mein photo tap → sirf select/deselect
  *   RULE 3: Selection ke saath COLLAPSED ki taraf → pehle collapse, phir discard popup
+ *
+ * DEBUG_OVERLAY (companion mein): true ho to panel ke upar-left mein ek chhota peela box
+ * state/height ke numbers dikhata hai. Bug pakadne ke baad false kar denge.
  */
 class AttachmentPanelView @JvmOverloads constructor(
     context: Context,
@@ -114,6 +119,8 @@ class AttachmentPanelView @JvmOverloads constructor(
     private val edCaption: EditText
     private val edCount: TextView
 
+    private var dbgView: TextView? = null
+
     // ---------------------------------------------------------------
     // Data
     // ---------------------------------------------------------------
@@ -161,9 +168,32 @@ class AttachmentPanelView @JvmOverloads constructor(
     private var stateAnimating = false   // collapsed/middle/full animation chal rahi hai
     private var dragging = false         // finger se sheet drag ho rahi hai
 
-    // Har naye animation par badhta hai — purane (cancel hue) animation ka late callback
-    // naye panel ki state/size ko kharab na kar sake.
+    // Har naye animation par badhta hai — purane (cancel hue) animation ka callback ignore ho.
+    // DHYAN: counter hamesha cancel() se PEHLE badhana hai (cancel turant onAnimationEnd bulata hai).
     private var animGeneration = 0
+
+    // Keyboard screen par ho to panel tab tak nahi khulta jab tak window poori height par na aa jaye
+    private var pendingOpen = false
+    private var pendingOpenBaseH = 0
+    private val pendingOpenTimeout = Runnable {
+        if (pendingOpen) {
+            pendingOpen = false
+            startOpen()
+        }
+    }
+
+    // Keyboard height tabhi save hoti hai jab window kuch der ek hi height par tiki rahe
+    private var kbCandidate = 0
+    private var lastWindowH = 0
+    private var lastWindowChangeAt = 0L
+    private val kbCommitRunnable = Runnable {
+        val c = kbCandidate
+        if (c > 0 && c != kbPx && fullH - lastWindowH == c) {
+            kbPx = c
+            prefs.edit().putInt(KEY_KB_PX, c).apply()
+            applySizing()
+        }
+    }
 
     private val touchSlop by lazy { ViewConfiguration.get(context).scaledTouchSlop }
     private var downX = 0f
@@ -299,6 +329,26 @@ class AttachmentPanelView @JvmOverloads constructor(
         headerSection.visibility = INVISIBLE
         optionsContainer.alpha = 0f
         curTop = hiddenTop
+
+        // TEMPORARY debug box (bug pakadne ke liye)
+        if (DEBUG_OVERLAY) {
+            val tv = TextView(context)
+            tv.setTextColor(0xFFFFFF00.toInt())
+            tv.setBackgroundColor(0xB3000000.toInt())
+            tv.textSize = 9f
+            tv.typeface = Typeface.MONOSPACE
+            tv.setPadding(dp(4f), dp(2f), dp(4f), dp(2f))
+            tv.isClickable = false
+            tv.elevation = dp(20f).toFloat()
+            val dlp = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            dlp.gravity = Gravity.TOP or Gravity.START
+            dlp.topMargin = dp(48f)
+            addView(tv, dlp)
+            dbgView = tv
+        }
     }
 
     private fun wireClicks() {
@@ -378,7 +428,7 @@ class AttachmentPanelView @JvmOverloads constructor(
     // ---------------------------------------------------------------
     // Public API (ChatActivity-compatible)
     // ---------------------------------------------------------------
-    fun isOpen(): Boolean = panelVisible
+    fun isOpen(): Boolean = panelVisible || pendingOpen
 
     /** ChatActivity: chatMainContent pass karo — input bar tray ke upar push ho jaayega. */
     fun setContentPushView(v: View) {
@@ -391,25 +441,37 @@ class AttachmentPanelView @JvmOverloads constructor(
             if (currentState != State.COLLAPSED) goState(State.COLLAPSED)
             return
         }
+        if (pendingOpen) return
 
-        // Parent (window) ki ABHI ki height lo — keyboard abhi band ho raha ho to purani
-        // (chhoti) height se geometry na bane.
-        (parent as? View)?.let { p ->
-            if (p.height > 0) {
-                panelH = p.height
-                trackWindowSize(p.width, p.height)
-            }
-        }
+        syncHeightFromParent()
 
         if (panelH == 0) {
             post { showPanel() }
             return
         }
 
-        stopTracking()          // koi purana adhura drag state na bachhe
-        resetGalleryToLatest()  // hamesha Recents + latest photos se shuru
+        // Keyboard abhi screen par hai (ChatActivity use hide kar rahi hai) → window abhi chhoti
+        // hai aur kuch der mein badi hogi. Us beech panel kholne se geometry adhuri window mein
+        // banti thi (aur tap galat jagah lagte the) — isliye window ke poori height par aane ka
+        // intezaar karo (timeout ke saath).
+        if (fullH > 0 && fullH - panelH > dp(120f)) {
+            pendingOpen = true
+            pendingOpenBaseH = panelH
+            hideKeyboardNow()
+            postDelayed(pendingOpenTimeout, PENDING_OPEN_TIMEOUT_MS)
+            updateDebug()
+            return
+        }
 
-        applySizing()   // panelVisible abhi false hai → push/position nahi chhedta
+        startOpen()
+    }
+
+    private fun startOpen() {
+        syncHeightFromParent()
+        if (panelH == 0) return
+
+        pristineReset()   // pichle session ka koi bhi bacha hua state saaf
+        applySizing()     // panelVisible abhi false hai → push/position nahi chhedta
 
         panelVisible = true
         // Fresh open hamesha COLLAPSED se — kabhi stale MIDDLE/FULL nahi
@@ -424,6 +486,16 @@ class AttachmentPanelView @JvmOverloads constructor(
     }
 
     fun hidePanel() {
+        // Khulne ka intezaar chal raha ho to use hi cancel kar do
+        if (pendingOpen) {
+            pendingOpen = false
+            removeCallbacks(pendingOpenTimeout)
+            visibility = GONE
+            onPanelVisibilityChanged?.invoke(false)
+            updateDebug()
+            return
+        }
+
         if (!panelVisible) return
         panelVisible = false
         stopTracking()
@@ -466,6 +538,31 @@ class AttachmentPanelView @JvmOverloads constructor(
         }
     }
 
+    /** Har naye khulne par pichhla sab kuch (popup/album/editor/selection/drag) saaf. */
+    private fun pristineReset() {
+        animGeneration++
+        animator?.cancel()
+        animator = null
+        openingClosing = false
+        stateAnimating = false
+        stopTracking()
+        pendingCollapseFrom = null
+        clearSelection()
+        resetGalleryToLatest()
+
+        discardPopup.animate().cancel()
+        discardPopup.visibility = GONE
+        albumSheet.animate().cancel()
+        albumSheet.visibility = GONE
+        editorOverlay.animate().cancel()
+        editorOverlay.visibility = GONE
+        editorOverlay.alpha = 1f
+        editorOpen = false
+
+        gridScrollLocked = true
+        downZone = Zone.OUTSIDE
+    }
+
     // ---------------------------------------------------------------
     // Gallery default: Recents + latest photos
     // ---------------------------------------------------------------
@@ -497,13 +594,27 @@ class AttachmentPanelView @JvmOverloads constructor(
         }
     }
 
+    private fun syncHeightFromParent() {
+        (parent as? View)?.let { p ->
+            if (p.height > 0) {
+                panelH = p.height
+                trackWindowSize(p.width, p.height)
+            }
+        }
+    }
+
     /**
      * Window (parent) ki height ka sabse bada maan = keyboard band. Jab height itni ghate
-     * (> 120dp) to farak = keyboard ki exact height (content coordinates mein) — yahi tray
+     * (> 120dp) aur kuch der wahin tiki rahe to farak = keyboard ki exact height — yahi tray
      * ki height banti hai, to input box keyboard ↔ panel switch par bilkul nahi hilta.
      */
     private fun trackWindowSize(w: Int, h: Int) {
         if (w <= 0 || h <= 0) return
+
+        if (h != lastWindowH) {
+            lastWindowH = h
+            lastWindowChangeAt = SystemClock.uptimeMillis()
+        }
 
         if (w != trackedW) {      // pehli baar ya rotation — naye sire se
             trackedW = w
@@ -513,19 +624,26 @@ class AttachmentPanelView @JvmOverloads constructor(
 
         if (h >= fullH) {
             fullH = h
-            return
+            kbCandidate = 0
+            removeCallbacks(kbCommitRunnable)
+        } else {
+            val diff = fullH - h
+            if (diff > dp(120f) && diff <= (fullH * 0.6f).toInt()) {
+                kbCandidate = diff
+                removeCallbacks(kbCommitRunnable)
+                postDelayed(kbCommitRunnable, 280)
+            }
         }
 
-        val diff = fullH - h
-
-        if (
-            diff > dp(120f) &&
-            diff <= (fullH * 0.6f).toInt() &&
-            diff != kbPx
-        ) {
-            kbPx = diff
-            prefs.edit().putInt(KEY_KB_PX, diff).apply()
-            post { applySizing() }
+        // Keyboard hatne ka intezaar kar rahe the → window badi ho gayi, ab panel kholo
+        if (pendingOpen && h - pendingOpenBaseH > dp(100f)) {
+            post {
+                if (pendingOpen) {
+                    pendingOpen = false
+                    removeCallbacks(pendingOpenTimeout)
+                    startOpen()
+                }
+            }
         }
     }
 
@@ -537,6 +655,22 @@ class AttachmentPanelView @JvmOverloads constructor(
         panelH = h
         trackWindowSize(w, h)
         applySizing()
+    }
+
+    // Size same rehne par onSizeChanged nahi bulata — isliye har layout par asli height se sync
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        super.onLayout(changed, left, top, right, bottom)
+        val h = bottom - top
+        if (h > 0 && h != panelH) {
+            panelH = h
+            post { applySizing() }
+        }
+    }
+
+    /** Dropdown (album list) sheet ke header ke THEEK neeche se shuru ho — chipak kar. */
+    private fun computeAlbumHeight(): Int {
+        val albumTop = topOf(currentState) + headerH
+        return (panelH - albumTop).toInt().coerceIn(dp(220f), max(panelH, dp(220f)))
     }
 
     private fun applySizing() {
@@ -580,12 +714,8 @@ class AttachmentPanelView @JvmOverloads constructor(
             scrimView.layoutParams = slp
         }
 
-        // Album list ki height current sheet-state ke hisaab se
-        albumHeightPx = if (currentState == State.FULL) {
-            (panelH * 0.88f).toInt()
-        } else {
-            (panelH * 0.56f).toInt()
-        }
+        // Album dropdown ki height: sheet ke asli top se (header ke neeche) bottom tak
+        albumHeightPx = computeAlbumHeight()
         val alp = albumSheet.layoutParams as FrameLayout.LayoutParams
         if (alp.height != albumHeightPx) {
             alp.height = albumHeightPx
@@ -600,7 +730,10 @@ class AttachmentPanelView @JvmOverloads constructor(
             if (panelVisible) applyPush(trayPx)
         }
 
-        if (isAlbumOpen()) albumSheet.translationY = 0f else albumSheet.translationY = albumHeightPx.toFloat()
+        // Dropdown band ho tab hi use neeche chhupa rakho (khuli ho to uski translation ko mat chhedo)
+        if (!isAlbumOpen()) albumSheet.translationY = albumHeightPx.toFloat()
+
+        updateDebug()
     }
 
     private fun applyPush(px: Int) {
@@ -620,11 +753,12 @@ class AttachmentPanelView @JvmOverloads constructor(
     private fun lerp(a: Float, b: Float, t: Float): Float = a + (b - a) * t
 
     // ---------------------------------------------------------------
-    // Open / close animations (LIVE geometry — keyboard band hone se window badi ho to bhi sahi)
+    // Open / close animations (LIVE geometry)
     // ---------------------------------------------------------------
     private fun animateOpenClose(opening: Boolean) {
+        val myGen = ++animGeneration   // PEHLE badhao, phir purana cancel karo
         animator?.cancel()
-        val myGen = ++animGeneration
+        animator = null
         openingClosing = true
         stateAnimating = false
 
@@ -665,7 +799,7 @@ class AttachmentPanelView @JvmOverloads constructor(
                     currentState = State.COLLAPSED
                     gridScrollLocked = true
                     applySizing()
-                    // Keyboard band hone se window baad mein badi ho sakti hai — phir se sahi baithao
+                    // Window baad mein badi/chhoti ho sakti hai — phir se sahi baithao
                     postDelayed({ applySizing() }, 350)
                 } else {
                     visibility = GONE
@@ -674,6 +808,7 @@ class AttachmentPanelView @JvmOverloads constructor(
                     optionsContainer.alpha = 0f
                     applyPush(0)
                 }
+                updateDebug()
             }
         })
 
@@ -761,6 +896,9 @@ class AttachmentPanelView @JvmOverloads constructor(
             return false
         }
 
+        // Dropdown khula ho to uske blank hisse par touch sirf consume ho (sheet drag nahi)
+        if (isAlbumOpen()) return true
+
         // Touch asli input-bar / paperclip / switch-icon ke area mein hai — neeche waali
         // asli view tak jaane do, khud claim mat karo.
         if (downZone == Zone.OUTSIDE) return false
@@ -769,8 +907,7 @@ class AttachmentPanelView @JvmOverloads constructor(
 
         if (!dragging) {
             // Sirf tap / blank-area touch — drag shuru hi nahi hua. Animation ke dauran ya
-            // sirf tap par KUCH mat karo (pehle yahi tap sheet ko MIDDLE mein settle kar deta tha).
-            // Drag tabhi shuru karo jab finger sach mein vertical hile.
+            // sirf tap par KUCH mat karo. Drag tabhi shuru karo jab finger sach mein vertical hile.
             if (action == MotionEvent.ACTION_MOVE && !openingClosing && downZone != Zone.BAR) {
                 val dy = event.y - downY
                 val dx = event.x - downX
@@ -855,8 +992,9 @@ class AttachmentPanelView @JvmOverloads constructor(
     fun goState(state: State) = goStateInternal(state, null)
 
     private fun goStateInternal(state: State, onEnd: (() -> Unit)?) {
+        val myGen = ++animGeneration   // PEHLE badhao, phir purana cancel karo
         animator?.cancel()
-        val myGen = ++animGeneration
+        animator = null
         openingClosing = false
         stateAnimating = false
         gridScrollLocked = state != State.FULL
@@ -895,6 +1033,7 @@ class AttachmentPanelView @JvmOverloads constructor(
                 updatePositions(topOf(state))
                 if (state == State.COLLAPSED) onReachedCollapsed()
                 onEnd?.invoke()
+                updateDebug()
             }
         })
 
@@ -918,6 +1057,17 @@ class AttachmentPanelView @JvmOverloads constructor(
         val fullSpan = (middleTop - fullTop).coerceAtLeast(1f)
         val ff = ((middleTop - y) / fullSpan).coerceIn(0f, 1f)
         headerBg.cornerRadii = topRadii(dp(16f) * (1f - ff))
+
+        updateDebug()
+    }
+
+    private fun updateDebug() {
+        if (!DEBUG_OVERLAY) return
+        dbgView?.text =
+            "st=$currentState vis=$panelVisible pend=$pendingOpen\n" +
+                "top=${curTop.toInt()} H=$panelH full=$fullH\n" +
+                "kb=$kbPx tray=$trayPx opt=$optH hdr=${headerH.toInt()}\n" +
+                "oc=$openingClosing sa=$stateAnimating dr=$dragging sel=${selection.size} alb=${isAlbumOpen()}"
     }
 
     // ---------------------------------------------------------------
@@ -960,8 +1110,10 @@ class AttachmentPanelView @JvmOverloads constructor(
     // RULE 1 & 2 — photo tap (multi-select, in-place)
     // ---------------------------------------------------------------
     private fun onThumbTap(img: RecentImage) {
-        // Panel khul/band ho raha ho tab anjaane mein hui tap ko ignore karo
-        if (openingClosing) return
+        // Panel khul/band ho raha ho ya window abhi-abhi badli ho (keyboard aa/ja raha ho) —
+        // tab anjaane mein hui tap ko ignore karo
+        if (openingClosing || pendingOpen) return
+        if (SystemClock.uptimeMillis() - lastWindowChangeAt < 250) return
 
         val idx = selection.indexOfFirst { it.uri == img.uri }
         val added: Boolean
@@ -1124,13 +1276,11 @@ class AttachmentPanelView @JvmOverloads constructor(
 
     private fun openAlbums() {
         if (!imagesLoaded) return
+        // Sheet hil rahi ho to dropdown mat kholo (galat height / position ban jaati thi)
+        if (stateAnimating || openingClosing || dragging) return
 
-        // Sheet abhi jis state (MIDDLE/FULL) mein hai usi ke hisaab se album ki height
-        albumHeightPx = if (currentState == State.FULL) {
-            (panelH * 0.88f).toInt()
-        } else {
-            (panelH * 0.56f).toInt()
-        }
+        // Sheet ke header ke THEEK neeche se bottom tak (chipak kar)
+        albumHeightPx = computeAlbumHeight()
         val alp = albumSheet.layoutParams as FrameLayout.LayoutParams
         alp.height = albumHeightPx
         albumSheet.layoutParams = alp
@@ -1144,15 +1294,16 @@ class AttachmentPanelView @JvmOverloads constructor(
         (albumRecycler.layoutManager as? androidx.recyclerview.widget.LinearLayoutManager)
             ?.scrollToPositionWithOffset(0, 0)
 
+        // Pichli band hone ki animation (aur uska "GONE") turant rok do, phir khol do
+        albumSheet.animate().cancel()
+        albumSheet.translationY = albumHeightPx.toFloat()
         albumSheet.visibility = VISIBLE
-        albumSheet.post {
-            albumSheet.translationY = albumHeightPx.toFloat()
-            albumSheet.animate().translationY(0f).setDuration(200).start()
-        }
+        albumSheet.animate().translationY(0f).setDuration(200).start()
     }
 
     private fun closeAlbums() {
         if (!isAlbumOpen()) return
+        albumSheet.animate().cancel()
         albumSheet.animate().translationY(albumHeightPx.toFloat()).setDuration(180).withEndAction {
             albumSheet.visibility = GONE
         }.start()
@@ -1188,32 +1339,47 @@ class AttachmentPanelView @JvmOverloads constructor(
             }
         }
 
-        // list top pe ho + neeche pull → sheet drag-close; warna normal scroll
-        var listDownY = 0f
-        var listTakingOver = false
-        albumRecycler.setOnTouchListener { _, ev ->
-            when (ev.actionMasked) {
-                MotionEvent.ACTION_DOWN -> { listDownY = ev.rawY; listTakingOver = false }
-                MotionEvent.ACTION_MOVE -> {
-                    val dy = ev.rawY - listDownY
-                    if (!listTakingOver && dy > touchSlop && !albumRecycler.canScrollVertically(-1)) {
-                        listTakingOver = true
+        // List top par ho aur neeche kheencho → poori dropdown sheet finger ke saath neeche jaaye.
+        // PEHLE yahan OnTouchListener tha jise DOWN tab milta hi nahi tha jab touch kisi album row
+        // (child) ne pakda ho — isliye "finger kahan rakhi thi" wali value purani rehti thi aur
+        // zara si touch par sheet bade jhatke se neeche jaakar band ho jaati thi.
+        // OnItemTouchListener ko HAR touch ka DOWN pehle milta hai.
+        albumRecycler.addOnItemTouchListener(object : RecyclerView.OnItemTouchListener {
+            private var downRawY = 0f
+            private var takingOver = false
+
+            override fun onInterceptTouchEvent(rv: RecyclerView, e: MotionEvent): Boolean {
+                when (e.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        downRawY = e.rawY
+                        takingOver = false
                     }
-                    if (listTakingOver) {
-                        albumSheet.translationY = max(0f, dy)
-                        albumRecycler.requestDisallowInterceptTouchEvent(true)
+                    MotionEvent.ACTION_MOVE -> {
+                        if (!takingOver && e.rawY - downRawY > touchSlop && !rv.canScrollVertically(-1)) {
+                            takingOver = true
+                        }
                     }
                 }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    if (listTakingOver) {
-                        if (albumSheet.translationY > albumHeightPx * 0.25f) closeAlbums()
-                        else albumSheet.animate().translationY(0f).setDuration(160).start()
+                return takingOver
+            }
+
+            override fun onTouchEvent(rv: RecyclerView, e: MotionEvent) {
+                when (e.actionMasked) {
+                    MotionEvent.ACTION_MOVE -> {
+                        albumSheet.translationY = max(0f, e.rawY - downRawY)
                     }
-                    listTakingOver = false
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        if (takingOver) {
+                            if (albumSheet.translationY > albumHeightPx * 0.25f) closeAlbums()
+                            else albumSheet.animate().translationY(0f).setDuration(160).start()
+                        }
+                        takingOver = false
+                    }
                 }
             }
-            false
-        }
+
+            override fun onRequestDisallowInterceptTouchEvent(disallowIntercept: Boolean) {}
+        })
     }
 
     // ---------------------------------------------------------------
@@ -1223,6 +1389,8 @@ class AttachmentPanelView @JvmOverloads constructor(
         super.onDetachedFromWindow()
         watchedParent?.removeOnLayoutChangeListener(parentLayoutListener)
         watchedParent = null
+        removeCallbacks(pendingOpenTimeout)
+        removeCallbacks(kbCommitRunnable)
         animator?.cancel()
         stopTracking()
         ioExecutor.shutdown()
@@ -1254,6 +1422,10 @@ class AttachmentPanelView @JvmOverloads constructor(
         private const val STRONG_FLING = 2600f
         private const val PREFS_NAME = "attach_panel_prefs"
         private const val KEY_KB_PX = "kb_px"
+        private const val PENDING_OPEN_TIMEOUT_MS = 650L
+
+        // TEMPORARY: true = peela debug box dikhega. Bug theek hone ke baad false kar denge.
+        private const val DEBUG_OVERLAY = true
     }
 
     // ---------------------------------------------------------------

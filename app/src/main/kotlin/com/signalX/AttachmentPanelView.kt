@@ -57,7 +57,7 @@ import kotlin.math.min
  *   RULE 3: Selection ke saath COLLAPSED ki taraf → pehle collapse, phir discard popup
  *
  * DEBUG_OVERLAY (companion mein): true ho to panel ke upar-left mein ek chhota peela box
- * state/height ke numbers dikhata hai. Bug pakadne ke baad false kar denge.
+ * state/height ke numbers dikhata hai. Abhi false hai.
  */
 class AttachmentPanelView @JvmOverloads constructor(
     context: Context,
@@ -182,13 +182,15 @@ class AttachmentPanelView @JvmOverloads constructor(
         }
     }
 
-    // Keyboard height tabhi save hoti hai jab window kuch der ek hi height par tiki rahe
+    // Keyboard height tabhi save hoti hai jab window kuch der ek hi height par tiki rahe.
+    // Aur sirf tab badalti hai jab naya naap pehle se bada ho ya bahut (20%+) chhota —
+    // isse tray ka size 510 ↔ 606 jaise chhote farak se baar-baar nahi badalta.
     private var kbCandidate = 0
     private var lastWindowH = 0
     private var lastWindowChangeAt = 0L
     private val kbCommitRunnable = Runnable {
         val c = kbCandidate
-        if (c > 0 && c != kbPx && fullH - lastWindowH == c) {
+        if (c > 0 && (c > kbPx || c < kbPx * 0.8f) && fullH - lastWindowH == c) {
             kbPx = c
             prefs.edit().putInt(KEY_KB_PX, c).apply()
             applySizing()
@@ -330,7 +332,7 @@ class AttachmentPanelView @JvmOverloads constructor(
         optionsContainer.alpha = 0f
         curTop = hiddenTop
 
-        // TEMPORARY debug box (bug pakadne ke liye)
+        // TEMPORARY debug box (bug pakadne ke liye) — abhi band hai
         if (DEBUG_OVERLAY) {
             val tv = TextView(context)
             tv.setTextColor(0xFFFFFF00.toInt())
@@ -1340,10 +1342,7 @@ class AttachmentPanelView @JvmOverloads constructor(
         }
 
         // List top par ho aur neeche kheencho → poori dropdown sheet finger ke saath neeche jaaye.
-        // PEHLE yahan OnTouchListener tha jise DOWN tab milta hi nahi tha jab touch kisi album row
-        // (child) ne pakda ho — isliye "finger kahan rakhi thi" wali value purani rehti thi aur
-        // zara si touch par sheet bade jhatke se neeche jaakar band ho jaati thi.
-        // OnItemTouchListener ko HAR touch ka DOWN pehle milta hai.
+        // OnItemTouchListener ko HAR touch ka DOWN pehle milta hai (child ne pakda ho tab bhi).
         albumRecycler.addOnItemTouchListener(object : RecyclerView.OnItemTouchListener {
             private var downRawY = 0f
             private var takingOver = false
@@ -1424,8 +1423,8 @@ class AttachmentPanelView @JvmOverloads constructor(
         private const val KEY_KB_PX = "kb_px"
         private const val PENDING_OPEN_TIMEOUT_MS = 650L
 
-        // TEMPORARY: true = peela debug box dikhega. Bug theek hone ke baad false kar denge.
-        private const val DEBUG_OVERLAY = true
+        // true = peela debug box dikhega (bug pakadne ke liye). Abhi band hai.
+        private const val DEBUG_OVERLAY = false
     }
 
     // ---------------------------------------------------------------

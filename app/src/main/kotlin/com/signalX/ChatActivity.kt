@@ -96,6 +96,11 @@ class ChatActivity : AppCompatActivity() {
     // wahi rehni chahiye, latest par dobara jump nahi hona chahiye.
     private var hasScrolledToLatestOnOpen = false
 
+    // Chat-list abhi bottom (latest message) par hai ya nahi. Keyboard / paperclip panel ke
+    // saath list ko neeche anchor SIRF tab karna hai jab user latest message par ho —
+    // purane message padh raha ho to uski position bilkul nahi hilni chahiye.
+    private var chatWasAtBottom = true
+
 
     private lateinit var highlightBanner: TextView
     private lateinit var highlightNavContainer: View
@@ -663,10 +668,49 @@ class ChatActivity : AppCompatActivity() {
             messageAdapter
 
 
-        // Jab bhi chat-list ki height ghate (keyboard khule ya paperclip panel khule),
-        // content ko utna hi upar scroll kar do jitni height ghati — isse jo message
-        // list ke bottom par dikh raha tha woh keyboard/panel ke UPAR hi dikhta rehta hai
-        // (WhatsApp jaisa), keyboard ke neeche nahi chhupta.
+        // User chat-list ko jahan chhod kar jaaye (bottom par ya beech mein) woh yaad rakho —
+        // taaki keyboard/panel ke saath sirf tabhi neeche anchor kare jab user latest
+        // message par ho.
+
+        rvMessages.addOnScrollListener(
+            object : RecyclerView.OnScrollListener() {
+
+                override fun onScrolled(
+                    recyclerView: RecyclerView,
+                    dx: Int,
+                    dy: Int
+                ) {
+
+                    // Asli scroll par hi (layout ke baad aane wale 0,0 callback ko ignore karo)
+                    if (dx != 0 || dy != 0) {
+
+                        chatWasAtBottom =
+                            !recyclerView.canScrollVertically(1)
+                    }
+                }
+
+                override fun onScrollStateChanged(
+                    recyclerView: RecyclerView,
+                    newState: Int
+                ) {
+
+                    if (
+                        newState ==
+                        RecyclerView.SCROLL_STATE_IDLE
+                    ) {
+
+                        chatWasAtBottom =
+                            !recyclerView.canScrollVertically(1)
+                    }
+                }
+            }
+        )
+
+
+        // Jab bhi chat-list ki height ghate (keyboard khule ya paperclip panel khule) AUR user
+        // latest message par ho, content ko utna hi upar scroll kar do jitni height ghati —
+        // isse latest message keyboard/panel ke UPAR hi dikhta rehta hai (WhatsApp jaisa).
+        // Agar user purane message padh raha hai to kuch bhi scroll NAHI hota.
 
         rvMessages.addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
 
@@ -676,7 +720,8 @@ class ChatActivity : AppCompatActivity() {
             if (
                 oldHeight > 0 &&
                 newHeight > 0 &&
-                newHeight < oldHeight
+                newHeight < oldHeight &&
+                chatWasAtBottom
             ) {
 
                 val shrinkBy = oldHeight - newHeight
